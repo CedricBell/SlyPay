@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+title: SpendLess
+message: >-
+  Open-source MVP for transaction-level credit card reward recommendations
+  (rules, offers, merchant/MCC resolution, explainable ranking).
+type: software
+repository-code: 'https://github.com/example/spendless'
+license: MIT
+authors:
+  - name: SpendLess contributors
