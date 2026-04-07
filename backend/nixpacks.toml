@@ -1,0 +1,14 @@
+# Si Railway n’utilise pas Docker : build explicite (yarn + nest + prisma)
+# Ignoré quand builder = DOCKERFILE dans railway.toml
+
+[variables]
+NIXPACKS_NODE_VERSION = "20"
+
+[phases.install]
+cmds = ["yarn install --frozen-lockfile --ignore-engines"]
+
+[phases.build]
+cmds = ["yarn prisma generate", "yarn build"]
+
+[start]
+cmd = "npx prisma migrate deploy && npx prisma db seed && node dist/main.js"

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { AdminModule } from './admin/admin.module';
 import { AuthModule } from './auth/auth.module';
 import { CardsModule } from './cards/cards.module';
 import { HealthModule } from './health/health.module';
@@ -16,6 +17,7 @@ import { UsersModule } from './users/users.module';
     PrismaModule,
     HealthModule,
     AuthModule,
+    AdminModule,
     UsersModule,
     CardsModule,
     OffersModule,

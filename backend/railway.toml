@@ -1,0 +1,9 @@
+# Railway: force Docker build (évite Nixpacks qui lance node sans compiler le Nest build)
+# Root directory du service = backend (dans l’UI Railway)
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "npx prisma migrate deploy && npx prisma db seed && node dist/main.js"

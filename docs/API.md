@@ -43,6 +43,32 @@ Returns fresh access + refresh (rotation).
 
 Header: `Authorization: Bearer <access>`
 
+Returns `{ id, email, role, isActive, createdAt }` (`role` is `USER` or `ADMIN`).
+
+---
+
+## Admin (JWT + `role: ADMIN`)
+
+### `GET /admin/users?page=1&limit=50`
+
+Paginated list: `items[]` with `id`, `email`, `role`, `isActive`, `createdAt`, `cardCount`, plus `total`, `page`, `pages`, `limit`.
+
+### `PATCH /admin/users/:id`
+
+```json
+{ "isActive": false }
+```
+
+```json
+{ "role": "ADMIN" }
+```
+
+```json
+{ "role": "USER" }
+```
+
+You cannot disable yourself or change your own role via this endpoint. Disabling a user revokes all refresh tokens for that account.
+
 ---
 
 ## Cards (JWT)

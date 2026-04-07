@@ -6,6 +6,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes } from 'crypto';
+import { UserRole } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 
@@ -32,7 +33,7 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
     const user = await this.users.create(email, password);
-    return this.issueTokens(user.id, user.email);
+    return this.issueTokens(user.id, user.email, user.role);
   }
 
   async login(email: string, password: string) {
@@ -40,11 +41,14 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
     }
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account disabled');
+    }
     const ok = await this.users.validatePassword(password, user.passwordHash);
     if (!ok) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    return this.issueTokens(user.id, user.email);
+    return this.issueTokens(user.id, user.email, user.role);
   }
 
   async refresh(refreshToken: string) {
@@ -61,8 +65,11 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException('Invalid refresh token');
     }
+    if (!user.isActive) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
     await this.prisma.refreshToken.delete({ where: { id: row.id } });
-    return this.issueTokens(user.id, user.email);
+    return this.issueTokens(user.id, user.email, user.role);
   }
 
   async logout(refreshToken: string) {
@@ -71,14 +78,18 @@ export class AuthService {
     return { ok: true };
   }
 
-  private async issueTokens(userId: string, email: string) {
+  private async issueTokens(
+    userId: string,
+    email: string,
+    role: UserRole = UserRole.USER,
+  ) {
     const accessTtl = this.config.get<string>('JWT_ACCESS_EXPIRES', '15m');
     const refreshDays = Number(
       this.config.get<string>('JWT_REFRESH_DAYS', '14'),
     );
 
     const accessToken = await this.jwt.signAsync(
-      { sub: userId, email },
+      { sub: userId, email, role },
       {
         secret: this.config.getOrThrow<string>('JWT_ACCESS_SECRET'),
         expiresIn: accessTtl as `${number}m` | `${number}d`,

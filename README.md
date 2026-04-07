@@ -70,8 +70,8 @@ Sous macOS avec Postgres installé via Homebrew, le superuser est souvent ton co
 cd backend
 cp .env.example .env            # edit DATABASE_URL + JWT_ACCESS_SECRET
 yarn install --ignore-engines   # if your Node is <20.19, Yarn ignores engine warnings
-yarn prisma migrate deploy      # or: yarn prisma:migrate:dev
-yarn prisma db seed
+yarn prisma migrate deploy      # or: yarn prisma:migrate:dev (applies UserRole / admin migration)
+yarn prisma db seed             # optional: SEED_ADMIN_EMAIL=you@mail.com to promote admin
 yarn start:dev
 ```
 
@@ -122,6 +122,8 @@ docker-compose.yml
 | Secrets | AWS Secrets Manager / SSM |
 
 Set strong `JWT_ACCESS_SECRET`, restrict `CORS_ORIGIN`, and run `prisma migrate deploy` in CI/CD before boot.
+
+**Guide pas à pas (lien public + admin)** : [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — Vercel + Railway, variable `SEED_ADMIN_EMAIL`, interface `/admin/users`.
 
 ## License
 

@@ -3,6 +3,7 @@ import {
   SpendCategory,
   EarningType,
   OfferStackPolicy,
+  UserRole,
 } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
@@ -100,10 +101,8 @@ async function main() {
   const existingCards = await prisma.creditCard.count({
     where: { userId: user.id },
   });
-  if (existingCards > 0) {
-    return;
-  }
 
+  if (existingCards === 0) {
   const sapphire = await prisma.creditCard.create({
     data: {
       userId: user.id,
@@ -172,6 +171,22 @@ async function main() {
       validUntil: end,
     },
   });
+  }
+
+  const promote = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
+  if (promote) {
+    const r = await prisma.user.updateMany({
+      where: { email: promote },
+      data: { role: UserRole.ADMIN },
+    });
+    if (r.count === 0) {
+      console.warn(
+        `[seed] SEED_ADMIN_EMAIL=${promote}: aucun compte — inscris-toi puis relance le seed.`,
+      );
+    } else {
+      console.log(`[seed] Compte ${promote} promu ADMIN`);
+    }
+  }
 }
 
 main()

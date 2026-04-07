@@ -28,6 +28,7 @@ services:
       JWT_REFRESH_DAYS: 14
       PORT: 4000
       CORS_ORIGIN: http://localhost:3000
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-}
     depends_on:
       db:
         condition: service_healthy

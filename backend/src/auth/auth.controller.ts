@@ -42,7 +42,13 @@ export class AuthController {
   async me(@CurrentUser() user: JwtUserPayload) {
     return this.prisma.user.findUniqueOrThrow({
       where: { id: user.sub },
-      select: { id: true, email: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+      },
     });
   }
 }
