@@ -3,6 +3,8 @@
 
 [variables]
 NIXPACKS_NODE_VERSION = "20"
+# Requis pour `prisma generate` pendant le build (l’URL réelle vient des variables Railway au runtime)
+DATABASE_URL = "postgresql://build:build@127.0.0.1:5432/build?schema=public"
 
 [phases.install]
 cmds = ["yarn install --frozen-lockfile --ignore-engines"]

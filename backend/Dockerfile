@@ -9,6 +9,8 @@ RUN yarn install --frozen-lockfile --ignore-engines
 
 FROM deps AS build
 COPY . .
+# Prisma charge le schéma au build : `env("DATABASE_URL")` doit exister (pas de connexion réelle ici)
+ENV DATABASE_URL="postgresql://build:build@127.0.0.1:5432/build?schema=public"
 RUN yarn prisma generate && yarn build
 
 FROM base AS runner
