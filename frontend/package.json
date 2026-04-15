@@ -7,7 +7,8 @@
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "db:seed": "prisma db seed"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
@@ -18,6 +19,9 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "zod": "^4.3.6"
+  },
+  "prisma": {
+    "seed": "node prisma/seed.mjs"
   },
   "devDependencies": {
     "typescript": "^5",

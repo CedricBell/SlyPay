@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
@@ -8,6 +9,7 @@ export type CatalogTemplate = {
   name: string;
   issuer: string;
   colorHex?: string;
+  imageUrl?: string;
   rules: Array<{
     category: string;
     multiplier: number;
@@ -74,7 +76,7 @@ export function CardCatalogSuggest({ onApply }: Props) {
             <li key={h.id}>
               <button
                 type="button"
-                className="flex w-full flex-col items-start px-3 py-2.5 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-sm hover:bg-zinc-50 dark:hover:bg-zinc-900"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   onApply(h);
@@ -83,10 +85,27 @@ export function CardCatalogSuggest({ onApply }: Props) {
                   setOpen(false);
                 }}
               >
-                <span className="font-medium text-zinc-900 dark:text-zinc-100">
-                  {h.name}
+                {h.imageUrl ? (
+                  <Image
+                    src={h.imageUrl}
+                    alt={`${h.issuer} ${h.name}`}
+                    width={64}
+                    height={40}
+                    className="h-10 w-16 rounded-md border border-zinc-200 object-cover dark:border-zinc-700"
+                    unoptimized
+                  />
+                ) : (
+                  <span
+                    className="h-10 w-16 rounded-md border border-zinc-200 dark:border-zinc-700"
+                    style={{ backgroundColor: h.colorHex ?? "#0f172a" }}
+                  />
+                )}
+                <span className="flex flex-col">
+                  <span className="font-medium text-zinc-900 dark:text-zinc-100">
+                    {h.name}
+                  </span>
+                  <span className="text-xs text-zinc-500">{h.issuer}</span>
                 </span>
-                <span className="text-xs text-zinc-500">{h.issuer}</span>
               </button>
             </li>
           ))}

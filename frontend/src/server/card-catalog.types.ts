@@ -11,6 +11,7 @@ export type CardCatalogEntry = {
   name: string;
   issuer: string;
   colorHex?: string;
+  imageUrl?: string;
   /** Approximate public earn structure — users should verify with their issuer */
   rules: CardCatalogRule[];
 };
