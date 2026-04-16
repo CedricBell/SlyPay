@@ -7,6 +7,7 @@ import { dec } from "@/lib/serialize";
 import { resolveSpendCategory } from "@/server/category-resolver";
 import { decideBestCard } from "@/server/decision-engine";
 import type { EngineCard } from "@/server/decision-engine.types";
+import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 
 const bodySchema = z.object({
   amount: z.number().min(0.01),
@@ -68,6 +69,25 @@ export async function POST(req: NextRequest) {
     amount: dto.amount,
     resolvedCategory: resolution.category,
     cards,
+    now: new Date(),
+  });
+  const marketCards: EngineCard[] = CARD_CATALOG_ENTRIES.map((c) => ({
+    id: `catalog:${c.id}`,
+    name: c.name,
+    issuer: c.issuer,
+    rules: c.rules.map((r) => ({
+      category: r.category,
+      multiplier: r.multiplier,
+      earningType: r.earningType,
+      capAmountMonthly: null,
+      priority: 0,
+    })),
+    offers: [],
+  }));
+  const marketResult = decideBestCard({
+    amount: dto.amount,
+    resolvedCategory: resolution.category,
+    cards: marketCards,
     now: new Date(),
   });
 
@@ -137,5 +157,17 @@ export async function POST(req: NextRequest) {
       effectiveMultiplier: r.effectiveMultiplier,
       earningType: r.earningType,
     })),
+    marketBest: marketResult.winner
+      ? {
+          cardId: marketResult.winner.cardId,
+          cardName: marketResult.winner.cardName,
+          issuer: marketResult.winner.issuer,
+          comparableValue: marketResult.winner.comparableValue,
+          effectiveMultiplier: marketResult.winner.effectiveMultiplier,
+          earningType: marketResult.winner.earningType,
+          deltaVsWalletBest:
+            marketResult.winner.comparableValue - engineResult.bestComparableValue,
+        }
+      : null,
   });
 }

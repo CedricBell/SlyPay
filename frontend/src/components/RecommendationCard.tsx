@@ -15,6 +15,15 @@ type Props = {
   ranked: Ranked[];
   alternatesTied: string[];
   trace: string[];
+  marketBest: {
+    cardId: string;
+    cardName: string;
+    issuer: string;
+    comparableValue: number;
+    effectiveMultiplier: number;
+    earningType: string;
+    deltaVsWalletBest: number;
+  } | null;
 };
 
 export function RecommendationCard({
@@ -25,6 +34,7 @@ export function RecommendationCard({
   ranked,
   alternatesTied,
   trace,
+  marketBest,
 }: Props) {
   return (
     <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
@@ -71,6 +81,30 @@ export function RecommendationCard({
             ))}
           </ul>
         </div>
+        {marketBest && (
+          <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 dark:border-sky-900 dark:bg-sky-950/30">
+            <p className="text-xs font-semibold uppercase text-sky-800 dark:text-sky-200">
+              Global catalog comparison
+            </p>
+            <p className="mt-1">
+              Best known catalog card for this spend:{" "}
+              <span className="font-semibold">
+                {marketBest.cardName} ({marketBest.issuer})
+              </span>
+            </p>
+            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+              {marketBest.effectiveMultiplier}x · score{" "}
+              {marketBest.comparableValue.toFixed(2)}
+            </p>
+            <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+              Gap vs your best wallet card:{" "}
+              <span className="font-medium">
+                {marketBest.deltaVsWalletBest >= 0 ? "+" : ""}
+                {marketBest.deltaVsWalletBest.toFixed(2)}
+              </span>
+            </p>
+          </div>
+        )}
         {ranked.length > 0 && (
           <div>
             <p className="text-xs font-semibold uppercase text-zinc-500">

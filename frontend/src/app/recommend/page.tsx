@@ -35,6 +35,15 @@ type RecRes = {
     earningType: string;
   }>;
   alternatesTied: string[];
+  marketBest: {
+    cardId: string;
+    cardName: string;
+    issuer: string;
+    comparableValue: number;
+    effectiveMultiplier: number;
+    earningType: string;
+    deltaVsWalletBest: number;
+  } | null;
 };
 
 type NearbyResponse = {
@@ -111,20 +120,6 @@ export default function RecommendPage() {
       setGeoLoading(false);
     }
   };
-
-  useEffect(() => {
-    if (typeof navigator === "undefined" || !("permissions" in navigator)) return;
-    void (async () => {
-      try {
-        const p = await navigator.permissions.query({ name: "geolocation" });
-        if (p.state === "granted") {
-          void detectNearby();
-        }
-      } catch {
-        // ignore unsupported Permissions API
-      }
-    })();
-  }, []);
 
   const run = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -277,6 +272,7 @@ export default function RecommendPage() {
           ranked={result.ranked}
           alternatesTied={result.alternatesTied}
           trace={result.categoryResolution.trace}
+          marketBest={result.marketBest}
         />
       )}
     </div>

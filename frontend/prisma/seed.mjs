@@ -347,6 +347,14 @@ const merchants = [
     notes: "Fuel at wholesale club",
     categories: [SpendCategory.GAS, SpendCategory.WHOLESALE],
   },
+  {
+    slug: "7-eleven",
+    displayName: "7-Eleven",
+    normalized: "7eleven",
+    mcc: "5499",
+    notes: "Convenience store test merchant",
+    categories: [SpendCategory.GROCERIES, SpendCategory.OTHER],
+  },
 ];
 
 const mccMap = [
