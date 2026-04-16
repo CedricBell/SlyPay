@@ -1,4 +1,4 @@
-// SpendLess B-lite: Supabase Auth + Prisma sur Postgres (même schéma métier, sans JWT maison)
+// SlyPay B-lite: Supabase Auth + Prisma sur Postgres (même schéma métier, sans JWT maison)
 // User.id = auth.users.id (UUID)
 
 generator client {

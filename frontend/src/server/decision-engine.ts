@@ -9,6 +9,8 @@ import {
 } from './decision-engine.types';
 
 const DEFAULT_MULTIPLIER = 1;
+const POINT_VALUE_USD = 0.0125;
+const MILE_VALUE_USD = 0.012;
 
 function toNumber(n: unknown): number {
   if (typeof n === 'number') return n;
@@ -27,7 +29,10 @@ export function comparableRewardValue(
   if (earningType === EarningType.CASHBACK_PERCENT) {
     return amount * (multiplier / 100);
   }
-  return amount * multiplier;
+  if (earningType === EarningType.POINTS) {
+    return amount * multiplier * POINT_VALUE_USD;
+  }
+  return amount * multiplier * MILE_VALUE_USD;
 }
 
 function pickRuleForCategory(

@@ -7,8 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useEffect, useState } from "react";
 
 const links = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/recommend", label: "Recommend" },
+  { href: "/dashboard", label: "Home" },
+  { href: "/recommend", label: "Now" },
   { href: "/cards", label: "Cards" },
 ];
 
@@ -53,7 +53,7 @@ export function NavBar() {
     <header className="border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
       <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-4 py-3">
         <Link href={authed ? "/dashboard" : "/"} className="font-semibold tracking-tight">
-          SpendLess
+          SlyPay
         </Link>
         {!isAuthPage && (
           <nav className="flex flex-1 items-center justify-end gap-1 sm:gap-3">

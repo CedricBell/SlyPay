@@ -11,7 +11,7 @@ export default function HomePage() {
           Use the right card at checkout—every time.
         </h1>
         <p className="max-w-2xl text-lg text-zinc-600 dark:text-zinc-400">
-          SpendLess combines your wallet rules, limited-time offers, and
+          SlyPay combines your wallet rules, limited-time offers, and
           merchant signals (including MCC-style mappings) to recommend the best
           card per purchase—not a generic “best card” blog post.
         </p>

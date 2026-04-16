@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0f172a"/>
+  <circle cx="256" cy="256" r="170" fill="#10b981" opacity="0.2"/>
+  <path d="M145 316c28 34 63 54 116 54 67 0 109-37 109-86 0-48-37-74-95-87l-28-6c-22-5-32-14-32-30 0-18 17-31 45-31 27 0 50 9 73 29l30-38c-29-26-63-40-106-40-62 0-106 37-106 85 0 47 34 73 93 84l28 6c24 5 35 14 35 33 0 22-18 35-50 35-31 0-62-12-89-38z" fill="#ecfeff"/>
+  <text x="256" y="434" text-anchor="middle" font-family="Arial, sans-serif" font-size="64" fill="#e2e8f0">SlyPay</text>
+</svg>
+
