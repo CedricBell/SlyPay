@@ -107,8 +107,9 @@ export async function POST(req: NextRequest) {
 
   const persist = dto.persist !== false;
 
+  let recommendationId: string | null = null;
   if (persist) {
-    await prisma.recommendation.create({
+    const created = await prisma.recommendation.create({
       data: {
         userId: ctx.appUser.id,
         amount: dto.amount,
@@ -123,6 +124,7 @@ export async function POST(req: NextRequest) {
             : undefined,
       },
     });
+    recommendationId = created.id;
   }
 
   const bestCard = engineResult.bestCardId
@@ -130,6 +132,7 @@ export async function POST(req: NextRequest) {
     : undefined;
 
   return NextResponse.json({
+    recommendationId,
     amount: dto.amount,
     resolvedCategory: resolution.category,
     categoryResolution: {

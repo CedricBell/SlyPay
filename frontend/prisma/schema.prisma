@@ -52,9 +52,10 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  creditCards     CreditCard[]
-  transactions    Transaction[]
-  recommendations Recommendation[]
+  creditCards             CreditCard[]
+  transactions            Transaction[]
+  recommendations         Recommendation[]
+  recommendationFeedbacks RecommendationFeedback[]
 
   @@index([email])
   @@index([role])
@@ -159,6 +160,22 @@ model Transaction {
   @@index([userId, createdAt])
 }
 
+/// User-reported mismatch vs engine output (review / quality loop).
+model RecommendationFeedback {
+  id                 String           @id @default(cuid())
+  userId             String
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recommendationId String?
+  recommendation     Recommendation? @relation(fields: [recommendationId], references: [id], onDelete: SetNull)
+  kind               String
+  note               String?
+  context            Json?
+  createdAt          DateTime         @default(now())
+
+  @@index([userId, createdAt])
+  @@index([recommendationId])
+}
+
 model Recommendation {
   id               String        @id @default(cuid())
   userId           String
@@ -171,6 +188,8 @@ model Recommendation {
   explanation      Json
   alternates       Json?
   createdAt        DateTime      @default(now())
+
+  feedbacks RecommendationFeedback[]
 
   @@index([userId, createdAt])
 }

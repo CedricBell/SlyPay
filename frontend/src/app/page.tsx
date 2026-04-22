@@ -2,29 +2,29 @@ import Link from "next/link";
 
 export default function HomePage() {
   return (
-    <div className="space-y-12 py-6">
-      <section className="space-y-4 text-center sm:text-left">
-        <p className="text-sm font-medium uppercase tracking-widest text-emerald-600">
+    <div className="motion-enter space-y-14 py-6 md:py-10">
+      <section className="space-y-6 text-center sm:text-left">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-600 dark:text-emerald-400">
           Real-time credit card decision engine
         </p>
-        <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl">
+        <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl md:text-6xl">
           Use the right card at checkout—every time.
         </h1>
-        <p className="max-w-2xl text-lg text-zinc-600 dark:text-zinc-400">
-          SlyPay combines your wallet rules, limited-time offers, and
-          merchant signals (including MCC-style mappings) to recommend the best
-          card per purchase—not a generic “best card” blog post.
+        <p className="mx-auto max-w-2xl text-lg leading-relaxed text-zinc-600 dark:text-zinc-400 sm:mx-0">
+          SlyPay combines your wallet rules, limited-time offers, and merchant
+          signals (including MCC-style mappings) to recommend the best card per
+          purchase—not a generic “best card” blog post.
         </p>
         <div className="flex flex-wrap justify-center gap-3 sm:justify-start">
           <Link
             href="/register"
-            className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
+            className="rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99]"
           >
             Create account
           </Link>
           <Link
             href="/login"
-            className="rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-semibold text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-900"
+            className="rounded-2xl border border-zinc-300/80 bg-[var(--surface)] px-6 py-3 text-sm font-semibold text-zinc-900 shadow-sm backdrop-blur-xl transition hover:border-emerald-400/40 dark:border-zinc-700 dark:text-zinc-50 dark:hover:border-emerald-800/40"
           >
             Sign in
           </Link>
@@ -47,10 +47,10 @@ export default function HomePage() {
         ].map((x) => (
           <div
             key={x.t}
-            className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950"
+            className="rounded-3xl border border-zinc-200/70 bg-[var(--surface)] p-6 shadow-md backdrop-blur-xl dark:border-zinc-800/80"
           >
-            <h2 className="font-semibold">{x.t}</h2>
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+            <h2 className="font-semibold text-zinc-900 dark:text-zinc-50">{x.t}</h2>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
               {x.d}
             </p>
           </div>

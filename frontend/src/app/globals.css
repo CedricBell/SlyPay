@@ -1,8 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f4f4f5;
+  --foreground: #0c0c0d;
+  --accent: #059669;
+  --accent-2: #0d9488;
+  --surface: rgba(255, 255, 255, 0.78);
+  --surface-elevated: rgba(255, 255, 255, 0.92);
+  --ring: rgba(16, 185, 129, 0.4);
 }
 
 @theme inline {
@@ -14,13 +19,79 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #09090b;
+    --foreground: #fafafa;
+    --surface: rgba(24, 24, 27, 0.75);
+    --surface-elevated: rgba(24, 24, 27, 0.92);
+    --ring: rgba(52, 211, 153, 0.35);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes sly-enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .motion-enter {
+    animation: sly-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  .motion-delay-1 {
+    animation-delay: 0.06s;
+  }
+
+  .motion-delay-2 {
+    animation-delay: 0.12s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .motion-enter,
+  .motion-delay-1,
+  .motion-delay-2 {
+    animation: none !important;
   }
 }
 
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page-sheen {
+  background-image:
+    radial-gradient(
+      1000px 520px at 12% -8%,
+      color-mix(in srgb, var(--accent) 16%, transparent),
+      transparent 55%
+    ),
+    radial-gradient(
+      720px 420px at 96% 4%,
+      color-mix(in srgb, var(--accent-2) 12%, transparent),
+      transparent 50%
+    ),
+    radial-gradient(
+      600px 360px at 50% 100%,
+      color-mix(in srgb, var(--accent) 8%, transparent),
+      transparent 55%
+    );
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }

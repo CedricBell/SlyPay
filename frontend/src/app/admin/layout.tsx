@@ -40,24 +40,24 @@ export default function AdminLayout({
 
   if (!ready) {
     return (
-      <div className="py-12 text-center text-sm text-zinc-500">
+      <div className="motion-enter py-16 text-center text-sm text-zinc-500">
         Vérification des droits admin…
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-zinc-800">
+    <div className="motion-enter space-y-8">
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-zinc-200/70 bg-[var(--surface)] px-5 py-4 shadow-sm backdrop-blur-xl dark:border-zinc-800/80">
         <div>
-          <h1 className="text-xl font-semibold">Administration</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Administration</h1>
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             Comptes utilisateurs
           </p>
         </div>
         <Link
           href="/dashboard"
-          className="text-sm font-medium text-emerald-600 hover:underline"
+          className="rounded-xl border border-zinc-200/80 px-4 py-2 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-500/10 dark:border-zinc-700 dark:text-emerald-400 dark:hover:bg-emerald-500/10"
         >
           ← Retour app
         </Link>

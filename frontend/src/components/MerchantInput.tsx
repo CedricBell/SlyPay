@@ -45,11 +45,11 @@ export function MerchantInput({ value, onChange, onPick }: Props) {
 
   return (
     <div className="relative">
-      <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+      <label className="mb-2 block text-sm font-medium text-zinc-800 dark:text-zinc-100">
         Where are you shopping?
       </label>
       <input
-        className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none ring-emerald-500/40 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+        className="w-full rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 text-zinc-900 shadow-inner outline-none ring-emerald-500/35 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
         placeholder="e.g. Whole Foods, Starbucks…"
         value={value}
         onFocus={() => setOpen(true)}
@@ -58,7 +58,7 @@ export function MerchantInput({ value, onChange, onPick }: Props) {
         autoComplete="off"
       />
       {open && (hits.length > 0 || loading) && (
-        <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-zinc-200 bg-white text-sm shadow-lg dark:border-zinc-800 dark:bg-zinc-950">
+        <ul className="absolute z-20 mt-2 max-h-56 w-full overflow-auto rounded-2xl border border-zinc-200/80 bg-[var(--surface-elevated)] text-sm shadow-xl backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-950/95">
           {loading && (
             <li className="px-3 py-2 text-zinc-500">Searching…</li>
           )}
@@ -66,7 +66,7 @@ export function MerchantInput({ value, onChange, onPick }: Props) {
             <li key={m.id}>
               <button
                 type="button"
-                className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                className="flex w-full flex-col items-start px-4 py-2.5 text-left transition first:rounded-t-2xl last:rounded-b-2xl hover:bg-emerald-500/10 dark:hover:bg-emerald-500/10"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   onChange(m.displayName);

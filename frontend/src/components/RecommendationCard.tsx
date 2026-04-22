@@ -1,3 +1,8 @@
+"use client";
+
+import { useState } from "react";
+import { apiFetch, ApiError } from "@/lib/api";
+
 type Ranked = {
   cardId: string;
   cardName: string;
@@ -6,6 +11,13 @@ type Ranked = {
   effectiveMultiplier: number;
   earningType: string;
 };
+
+export type MismatchKind =
+  | "WRONG_MERCHANT"
+  | "WRONG_CATEGORY"
+  | "REWARD_MISMATCH"
+  | "WRONG_CARD_IN_PRACTICE"
+  | "OTHER";
 
 type Props = {
   amount: number;
@@ -24,7 +36,17 @@ type Props = {
     earningType: string;
     deltaVsWalletBest: number;
   } | null;
+  recommendationId?: string | null;
+  merchantLabel?: string | null;
 };
+
+const MISMATCH_OPTIONS: { kind: MismatchKind; label: string }[] = [
+  { kind: "WRONG_MERCHANT", label: "Wrong store" },
+  { kind: "WRONG_CATEGORY", label: "Wrong category" },
+  { kind: "REWARD_MISMATCH", label: "Reward didn’t match" },
+  { kind: "WRONG_CARD_IN_PRACTICE", label: "Better card in practice" },
+  { kind: "OTHER", label: "Other" },
+];
 
 export function RecommendationCard({
   amount,
@@ -35,100 +57,200 @@ export function RecommendationCard({
   alternatesTied,
   trace,
   marketBest,
+  recommendationId,
+  merchantLabel,
 }: Props) {
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const submit = async (kind: MismatchKind) => {
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      await apiFetch<{ ok: boolean }>("/recommendations/feedback", {
+        method: "POST",
+        body: JSON.stringify({
+          recommendationId: recommendationId ?? undefined,
+          kind,
+          note: note.trim() || undefined,
+          context: {
+            merchantLabel: merchantLabel ?? null,
+            amount,
+            resolvedCategory,
+            bestCardName: bestCard?.name ?? null,
+            bestCardIssuer: bestCard?.issuer ?? null,
+          },
+        }),
+      });
+      setMsg("Thanks — we logged that for review.");
+      setNote("");
+    } catch (e) {
+      if (e instanceof ApiError) setErr(e.body || e.message);
+      else setErr("Could not send report");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
-      <div className="border-b border-zinc-100 bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-4 text-white dark:border-zinc-800">
-        <p className="text-xs font-medium uppercase tracking-wide text-emerald-100">
-          Best card for this purchase
-        </p>
-        <h2 className="mt-1 text-2xl font-semibold">
-          {bestCard ? bestCard.name : "Add a card to get recommendations"}
-        </h2>
-        {bestCard && (
-          <p className="text-sm text-emerald-100">
-            {bestCard.issuer}
-            {bestCard.last4 ? ` · ending ${bestCard.last4}` : ""}
+    <div className="motion-enter overflow-hidden rounded-3xl border border-zinc-200/80 bg-[var(--surface)] shadow-[0_24px_80px_-32px_rgba(0,0,0,0.35)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/70 dark:shadow-[0_28px_90px_-36px_rgba(0,0,0,0.65)]">
+      <div className="relative border-b border-white/10 bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-5 py-5 text-white sm:px-6 sm:py-6">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(800px_200px_at_20%_-40%,rgba(255,255,255,0.35),transparent)] opacity-90" />
+        <div className="relative">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-100/90">
+            Best card for this purchase
           </p>
-        )}
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+            {bestCard ? bestCard.name : "Add a card to get recommendations"}
+          </h2>
+          {bestCard && (
+            <p className="mt-1 text-sm text-emerald-50/90">
+              {bestCard.issuer}
+              {bestCard.last4 ? ` · ending ${bestCard.last4}` : ""}
+            </p>
+          )}
+        </div>
       </div>
-      <div className="space-y-4 px-5 py-4 text-sm text-zinc-700 dark:text-zinc-300">
-        <div>
-          <p className="text-xs font-semibold uppercase text-zinc-500">
+
+      <div className="space-y-5 px-5 py-5 text-sm text-zinc-700 dark:text-zinc-200 sm:px-6 sm:py-6">
+        <div className="rounded-2xl border border-zinc-200/60 bg-white/50 px-4 py-3 dark:border-zinc-800/80 dark:bg-zinc-900/40">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
             Context
           </p>
-          <p>
-            ${amount.toFixed(2)} · resolved category{" "}
-            <span className="font-mono text-xs">{resolvedCategory}</span>
+          <p className="mt-1 font-medium text-zinc-900 dark:text-zinc-50">
+            ${amount.toFixed(2)} ·{" "}
+            <span className="font-mono text-xs text-zinc-600 dark:text-zinc-300">
+              {resolvedCategory}
+            </span>
+            {merchantLabel ? (
+              <span className="mt-1 block text-xs font-normal text-zinc-500">
+                Merchant: {merchantLabel}
+              </span>
+            ) : null}
           </p>
         </div>
+
         {alternatesTied.length > 0 && (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+          <p className="rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/35 dark:text-amber-50">
             Tie detected: multiple cards score the same. Showing deterministic
             winner; see ranking below.
           </p>
         )}
+
         <div>
-          <p className="text-xs font-semibold uppercase text-zinc-500">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
             Why this card
           </p>
-          <ul className="mt-1 list-inside list-disc space-y-1">
+          <ul className="mt-2 space-y-1.5 text-zinc-700 dark:text-zinc-300">
             {trace.map((t, i) => (
-              <li key={`t-${i}`}>{t}</li>
+              <li key={`t-${i}`} className="flex gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                <span>{t}</span>
+              </li>
             ))}
             {reasoning.map((t, i) => (
-              <li key={`r-${i}`}>{t}</li>
+              <li key={`r-${i}`} className="flex gap-2">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-400" />
+                <span>{t}</span>
+              </li>
             ))}
           </ul>
         </div>
+
         {marketBest && (
-          <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-3 dark:border-sky-900 dark:bg-sky-950/30">
-            <p className="text-xs font-semibold uppercase text-sky-800 dark:text-sky-200">
+          <div className="rounded-2xl border border-sky-300/50 bg-gradient-to-br from-sky-50 to-white px-4 py-4 dark:border-sky-900/60 dark:from-sky-950/50 dark:to-zinc-950/40">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-800 dark:text-sky-200">
               Global catalog comparison
             </p>
-            <p className="mt-1">
+            <p className="mt-1 text-zinc-800 dark:text-zinc-100">
               Best known catalog card for this spend:{" "}
               <span className="font-semibold">
                 {marketBest.cardName} ({marketBest.issuer})
               </span>
             </p>
-            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+            <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
               {marketBest.effectiveMultiplier}x · score{" "}
               {marketBest.comparableValue.toFixed(2)}
             </p>
-            <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+            <p className="mt-2 text-xs text-zinc-600 dark:text-zinc-400">
               Gap vs your best wallet card:{" "}
-              <span className="font-medium">
+              <span className="font-semibold text-zinc-900 dark:text-zinc-100">
                 {marketBest.deltaVsWalletBest >= 0 ? "+" : ""}
                 {marketBest.deltaVsWalletBest.toFixed(2)}
               </span>
             </p>
           </div>
         )}
+
         {ranked.length > 0 && (
           <div>
-            <p className="text-xs font-semibold uppercase text-zinc-500">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
               All cards (ranked)
             </p>
-            <ol className="mt-2 space-y-2">
+            <ol className="mt-3 space-y-2">
               {ranked.map((r, idx) => (
                 <li
                   key={r.cardId}
-                  className="flex items-center justify-between rounded-lg border border-zinc-100 px-3 py-2 dark:border-zinc-800"
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/70 bg-white/60 px-3 py-2.5 transition hover:border-emerald-300/50 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:hover:border-emerald-900/40"
                 >
-                  <span>
+                  <span className="min-w-0">
                     <span className="text-zinc-400">{idx + 1}. </span>
-                    {r.cardName}{" "}
+                    <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                      {r.cardName}
+                    </span>{" "}
                     <span className="text-zinc-500">({r.issuer})</span>
                   </span>
-                  <span className="font-mono text-xs text-zinc-600 dark:text-zinc-400">
-                    {r.effectiveMultiplier}x · score {r.comparableValue.toFixed(2)}
+                  <span className="shrink-0 font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
+                    {r.effectiveMultiplier}x · {r.comparableValue.toFixed(2)}
                   </span>
                 </li>
               ))}
             </ol>
           </div>
         )}
+
+        <div className="rounded-2xl border border-zinc-200/80 bg-zinc-50/80 px-4 py-4 dark:border-zinc-800 dark:bg-zinc-900/50">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+            Something look wrong?
+          </p>
+          <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
+            Quick report helps us fix merchant mappings and reward logic.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {MISMATCH_OPTIONS.map((o) => (
+              <button
+                key={o.kind}
+                type="button"
+                disabled={busy}
+                onClick={() => void submit(o.kind)}
+                className="rounded-full border border-zinc-300/80 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 shadow-sm transition active:scale-[0.98] hover:border-emerald-400 hover:text-emerald-800 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-emerald-700 dark:hover:text-emerald-200"
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <label className="mt-3 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            Optional note
+            <textarea
+              className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-emerald-500/30 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              rows={2}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="e.g. terminal showed grocery, not dining…"
+            />
+          </label>
+          {msg && (
+            <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              {msg}
+            </p>
+          )}
+          {err && (
+            <p className="mt-2 text-xs text-red-600 dark:text-red-400">{err}</p>
+          )}
+        </div>
       </div>
     </div>
   );

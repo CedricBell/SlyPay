@@ -26,16 +26,16 @@ export function WalletCardList({ cards, selectedId, onSelect }: Props) {
     <div className="grid gap-2 sm:grid-cols-2">
       {cards.map((c) => {
         const active = selectedId === c.id;
-        return (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => onSelect(active ? null : c.id)}
-            className={`flex flex-col rounded-xl border px-3 py-3 text-left transition ${
-              active
-                ? "border-emerald-600 ring-2 ring-emerald-500/30"
-                : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700"
-            }`}
+    return (
+      <button
+        key={c.id}
+        type="button"
+        onClick={() => onSelect(active ? null : c.id)}
+        className={`flex flex-col rounded-2xl border px-3 py-3 text-left transition active:scale-[0.99] ${
+          active
+            ? "border-emerald-500/60 bg-emerald-500/10 ring-2 ring-emerald-500/25 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/10"
+            : "border-zinc-200/80 bg-white/50 hover:border-emerald-300/50 dark:border-zinc-800 dark:bg-zinc-950/40 dark:hover:border-emerald-900/40"
+        }`}
             style={{
               borderLeftWidth: 4,
               borderLeftColor: c.colorHex ?? "#0f172a",
