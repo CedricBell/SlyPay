@@ -28,6 +28,29 @@ const createBody = z.object({
   rules: z.array(ruleInput).optional(),
 });
 
+function sanitizeRules(
+  rules: z.infer<typeof ruleInput>[] | undefined,
+): z.infer<typeof ruleInput>[] {
+  if (!rules?.length) return [];
+  const byCategory = new Map<SpendCategory, z.infer<typeof ruleInput>>();
+  for (const rule of rules) {
+    const current = byCategory.get(rule.category);
+    if (!current || rule.multiplier > current.multiplier) {
+      byCategory.set(rule.category, rule);
+    }
+  }
+  if (!byCategory.has(SpendCategory.OTHER)) {
+    byCategory.set(SpendCategory.OTHER, {
+      category: SpendCategory.OTHER,
+      multiplier: 1,
+      earningType: EarningType.POINTS,
+      priority: -1,
+      notes: "Auto-added fallback rule",
+    });
+  }
+  return [...byCategory.values()];
+}
+
 export async function GET() {
   const ctx = await getSessionAppUser();
   if (!ctx) {
@@ -55,6 +78,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
+  const normalizedRules = sanitizeRules(body.rules);
 
   const card = await prisma.$transaction(async (tx) => {
     const c = await tx.creditCard.create({
@@ -68,9 +92,9 @@ export async function POST(req: NextRequest) {
       },
       include: cardInclude,
     });
-    if (body.rules?.length) {
+    if (normalizedRules.length) {
       await tx.rewardRule.createMany({
-        data: body.rules.map((r) => ({
+        data: normalizedRules.map((r) => ({
           creditCardId: c.id,
           category: r.category,
           multiplier: r.multiplier,

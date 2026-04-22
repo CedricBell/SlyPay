@@ -56,7 +56,7 @@ type NearbyMatch = {
     id: string;
     displayName: string;
     mcc: string | null;
-  };
+  } | null;
   confidence: number;
 };
 
@@ -68,6 +68,7 @@ type NearbyResponse = {
 type ConfidenceTier = "high" | "medium" | "low";
 
 function confidenceTier(m: NearbyMatch): ConfidenceTier {
+  if (!m.merchant) return "low";
   if (m.confidence >= 100 && m.distanceMeters <= 220) return "high";
   if (m.confidence >= 55 || m.distanceMeters <= 110) return "medium";
   return "low";
@@ -99,7 +100,7 @@ export default function RecommendPage() {
   const router = useRouter();
   const [merchant, setMerchant] = useState("");
   const [mcc, setMcc] = useState("");
-  const [amount, setAmount] = useState("42.5");
+  const [amount, setAmount] = useState("100");
   const [cards, setCards] = useState<CardRow[]>([]);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [result, setResult] = useState<RecRes | null>(null);
@@ -138,8 +139,15 @@ export default function RecommendPage() {
   }, [router]);
 
   const visibleMatches = useMemo(
-    () => nearby.filter((n) => !skippedMerchantIds.has(n.merchant.id)),
+    () =>
+      nearby.filter(
+        (n) => !n.merchant || !skippedMerchantIds.has(n.merchant.id),
+      ),
     [nearby, skippedMerchantIds],
+  );
+  const knownVisibleMatches = useMemo(
+    () => visibleMatches.filter((m) => m.merchant),
+    [visibleMatches],
   );
 
   const runRecommendation = useCallback(
@@ -186,6 +194,13 @@ export default function RecommendPage() {
   );
 
   const applyMatch = (m: NearbyMatch) => {
+    if (!m.merchant) {
+      setMerchant(m.detectedName);
+      setMcc("");
+      setActiveTier("low");
+      setTopDetectedName(m.detectedName);
+      return;
+    }
     setMerchant(m.merchant.displayName);
     if (m.merchant.mcc) setMcc(m.merchant.mcc);
     setActiveTier(confidenceTier(m));
@@ -238,6 +253,7 @@ export default function RecommendPage() {
         `/merchants/nearby?lat=${lat}&lng=${lng}`,
       );
       setNearby(data.matches);
+      const known = data.matches.filter((m) => m.merchant);
       if (data.matches.length === 0) {
         setActiveTier(null);
         setTopDetectedName(null);
@@ -246,13 +262,12 @@ export default function RecommendPage() {
         );
         return;
       }
-      const top = data.matches[0];
+      const top = known[0] ?? data.matches[0];
       applyMatch(top);
       const tier = confidenceTier(top);
-      setGeoMsg(
-        `Detected nearby: ${top.merchant.displayName} (${top.distanceMeters}m).`,
-      );
-      if (tier === "high") {
+      const topName = top.merchant?.displayName ?? top.detectedName;
+      setGeoMsg(`Detected nearby: ${topName} (${top.distanceMeters}m).`);
+      if (tier === "high" && top.merchant) {
         setOneTapBanner(
           `Recommended now for ${top.merchant.displayName} — adjust amount or store if needed.`,
         );
@@ -262,13 +277,13 @@ export default function RecommendPage() {
           amountUsd: Number(amount),
           clearBanner: false,
         });
-      } else if (tier === "medium") {
+      } else if (tier === "medium" && top.merchant) {
         setOneTapBanner(
           `We prefilled ${top.merchant.displayName}. Tap “Get recommendation” to confirm.`,
         );
       } else {
         setOneTapBanner(
-          "Low confidence match — pick an alternative below or type the store name.",
+          "Low confidence match — pick a place below or type the store name.",
         );
       }
     } catch {
@@ -279,7 +294,7 @@ export default function RecommendPage() {
   };
 
   const notThisMerchant = async () => {
-    const top = visibleMatches[0];
+    const top = knownVisibleMatches[0];
     if (!top) {
       setMerchant("");
       setMcc("");
@@ -288,17 +303,19 @@ export default function RecommendPage() {
       return;
     }
     void logWrongMerchantNearby({
-      merchantId: top.merchant.id,
-      displayName: top.merchant.displayName,
+      merchantId: top.merchant!.id,
+      displayName: top.merchant!.displayName,
       detectedName: topDetectedName,
     });
     const next = new Set(skippedMerchantIds);
-    next.add(top.merchant.id);
+    next.add(top.merchant!.id);
     setSkippedMerchantIds(next);
-    const rest = nearby.filter((n) => !next.has(n.merchant.id));
+    const rest = knownVisibleMatches.filter((n) => !next.has(n.merchant!.id));
     if (rest[0]) {
       applyMatch(rest[0]);
-      setGeoMsg(`Switched to ${rest[0].merchant.displayName} (${rest[0].distanceMeters}m).`);
+      setGeoMsg(
+        `Switched to ${rest[0].merchant!.displayName} (${rest[0].distanceMeters}m).`,
+      );
       setOneTapBanner(null);
     } else {
       setMerchant("");
@@ -310,7 +327,7 @@ export default function RecommendPage() {
     }
   };
 
-  const alternativeMatches = visibleMatches.slice(1, 4);
+  const alternativeMatches = knownVisibleMatches.slice(1, 6);
 
   return (
     <div className="motion-enter space-y-8">
@@ -351,7 +368,7 @@ export default function RecommendPage() {
                 Uses your location once per tap to match OpenStreetMap places
                 with merchants in SlyPay.
               </p>
-              {activeTier && visibleMatches[0] && (
+              {activeTier && knownVisibleMatches[0] && (
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span
                     className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${tierBadgeClass(activeTier)}`}
@@ -359,8 +376,8 @@ export default function RecommendPage() {
                     {tierLabel(activeTier)}
                   </span>
                   <span className="text-[11px] text-zinc-500">
-                    score {visibleMatches[0].confidence} ·{" "}
-                    {visibleMatches[0].distanceMeters}m
+                    score {knownVisibleMatches[0].confidence} ·{" "}
+                    {knownVisibleMatches[0].distanceMeters}m
                   </span>
                 </div>
               )}
@@ -381,9 +398,9 @@ export default function RecommendPage() {
           )}
           {visibleMatches.length > 0 && (
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              {visibleMatches.slice(0, 4).map((n) => (
+              {visibleMatches.slice(0, 12).map((n) => (
                 <button
-                  key={`${n.merchant.id}-${n.detectedName}`}
+                  key={`${n.merchant?.id ?? n.detectedName}-${n.distanceMeters}`}
                   type="button"
                   className="rounded-full border border-sky-300/60 bg-white/80 px-3 py-1.5 text-xs font-semibold text-sky-900 shadow-sm transition hover:bg-sky-50 active:scale-[0.98] dark:border-sky-800 dark:bg-zinc-950/60 dark:text-sky-100 dark:hover:bg-sky-950/50"
                   onClick={() => {
@@ -391,16 +408,18 @@ export default function RecommendPage() {
                     setOneTapBanner(null);
                   }}
                 >
-                  {n.merchant.displayName} ({n.distanceMeters}m)
+                  {n.merchant?.displayName ?? n.detectedName} ({n.distanceMeters}m)
                 </button>
               ))}
-              <button
-                type="button"
-                onClick={() => void notThisMerchant()}
-                className="rounded-full border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-200 active:scale-[0.98] dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-              >
-                Not this merchant
-              </button>
+              {knownVisibleMatches.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => void notThisMerchant()}
+                  className="rounded-full border border-zinc-300 bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-800 transition hover:bg-zinc-200 active:scale-[0.98] dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                >
+                  Not this merchant
+                </button>
+              )}
             </div>
           )}
           {(activeTier === "low" || activeTier === "medium") &&
@@ -412,17 +431,17 @@ export default function RecommendPage() {
                 <div className="mt-2 flex flex-wrap gap-2">
                   {alternativeMatches.map((n) => (
                     <button
-                      key={`alt-${n.merchant.id}-${n.detectedName}`}
+                      key={`alt-${n.merchant!.id}-${n.detectedName}`}
                       type="button"
                       className="rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                       onClick={() => {
                         applyMatch(n);
                         setOneTapBanner(
-                          `Selected ${n.merchant.displayName}. Tap “Get recommendation”.`,
+                          `Selected ${n.merchant!.displayName}. Tap “Get recommendation”.`,
                         );
                       }}
                     >
-                      {n.merchant.displayName} · {n.confidence} pts
+                      {n.merchant!.displayName} · {n.confidence} pts
                     </button>
                   ))}
                 </div>

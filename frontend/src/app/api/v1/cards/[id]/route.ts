@@ -25,6 +25,29 @@ const patchBody = z.object({
   rules: z.array(ruleInput).optional(),
 });
 
+function sanitizeRules(
+  rules: z.infer<typeof ruleInput>[] | undefined,
+): z.infer<typeof ruleInput>[] {
+  if (!rules?.length) return [];
+  const byCategory = new Map<SpendCategory, z.infer<typeof ruleInput>>();
+  for (const rule of rules) {
+    const current = byCategory.get(rule.category);
+    if (!current || rule.multiplier > current.multiplier) {
+      byCategory.set(rule.category, rule);
+    }
+  }
+  if (!byCategory.has(SpendCategory.OTHER)) {
+    byCategory.set(SpendCategory.OTHER, {
+      category: SpendCategory.OTHER,
+      multiplier: 1,
+      earningType: EarningType.POINTS,
+      priority: -1,
+      notes: "Auto-added fallback rule",
+    });
+  }
+  return [...byCategory.values()];
+}
+
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Params) {
@@ -77,10 +100,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       },
     });
     if (body.rules) {
+      const normalizedRules = sanitizeRules(body.rules);
       await tx.rewardRule.deleteMany({ where: { creditCardId: id } });
-      if (body.rules.length) {
+      if (normalizedRules.length) {
         await tx.rewardRule.createMany({
-          data: body.rules.map((r) => ({
+          data: normalizedRules.map((r) => ({
             creditCardId: id,
             category: r.category,
             multiplier: r.multiplier,

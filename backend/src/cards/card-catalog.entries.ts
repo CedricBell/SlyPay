@@ -34,6 +34,9 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = [
     issuer: 'Chase',
     colorHex: '#1e3a5f',
     rules: [
+      { category: SpendCategory.DINING, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.DRUGSTORES, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
       { category: SpendCategory.OTHER, multiplier: 1.5, earningType: EarningType.CASHBACK_PERCENT },
     ],
   },
@@ -43,6 +46,9 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = [
     issuer: 'Chase',
     colorHex: '#0d9488',
     rules: [
+      { category: SpendCategory.DINING, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.DRUGSTORES, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
       { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.CASHBACK_PERCENT },
     ],
   },
@@ -64,6 +70,7 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = [
     colorHex: '#a1a1aa',
     rules: [
       { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.POINTS },
+      { category: SpendCategory.DINING, multiplier: 1, earningType: EarningType.POINTS },
       { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.POINTS },
     ],
   },
@@ -84,6 +91,8 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = [
     issuer: 'Citi',
     colorHex: '#003b70',
     rules: [
+      { category: SpendCategory.GAS, multiplier: 2, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.DRUGSTORES, multiplier: 2, earningType: EarningType.CASHBACK_PERCENT },
       { category: SpendCategory.OTHER, multiplier: 2, earningType: EarningType.CASHBACK_PERCENT },
     ],
   },
@@ -93,6 +102,10 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = [
     issuer: 'Citi',
     colorHex: '#0ea5e9',
     rules: [
+      { category: SpendCategory.GROCERIES, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.GAS, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.DINING, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
       { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.CASHBACK_PERCENT },
     ],
   },
@@ -102,7 +115,7 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = [
     issuer: 'Capital One',
     colorHex: '#1a1a1a',
     rules: [
-      { category: SpendCategory.TRAVEL, multiplier: 2, earningType: EarningType.MILES },
+      { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.MILES },
       { category: SpendCategory.OTHER, multiplier: 2, earningType: EarningType.MILES },
     ],
   },
@@ -114,6 +127,7 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = [
     rules: [
       { category: SpendCategory.DINING, multiplier: 4, earningType: EarningType.CASHBACK_PERCENT },
       { category: SpendCategory.ENTERTAINMENT, multiplier: 4, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.GROCERIES, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
       { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.CASHBACK_PERCENT },
     ],
   },
@@ -123,6 +137,10 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = [
     issuer: 'Discover',
     colorHex: '#f97316',
     rules: [
+      { category: SpendCategory.GROCERIES, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.GAS, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.DINING, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
       { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.CASHBACK_PERCENT },
     ],
   },
@@ -132,6 +150,8 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = [
     issuer: 'Wells Fargo',
     colorHex: '#d97706',
     rules: [
+      { category: SpendCategory.TRAVEL, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.ONLINE_SHOPPING, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
       { category: SpendCategory.OTHER, multiplier: 2, earningType: EarningType.CASHBACK_PERCENT },
     ],
   },
@@ -141,6 +161,10 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = [
     issuer: 'Bank of America',
     colorHex: '#e11d48',
     rules: [
+      { category: SpendCategory.ONLINE_SHOPPING, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.GAS, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.DINING, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
+      { category: SpendCategory.DRUGSTORES, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
       { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.CASHBACK_PERCENT },
     ],
   },

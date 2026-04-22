@@ -20,7 +20,7 @@ type NearbyMatch = {
     displayName: string;
     mcc: string | null;
     categoryHint: SpendCategory | null;
-  };
+  } | null;
   confidence: number;
 };
 
@@ -28,10 +28,12 @@ function buildOverpassQuery(lat: number, lng: number, radius = 250): string {
   return `
 [out:json][timeout:8];
 (
-  node(around:${radius},${lat},${lng})["shop"~"supermarket|convenience|department_store|mall|chemist|health_food|bakery"];
-  node(around:${radius},${lat},${lng})["amenity"~"pharmacy|fuel|restaurant|fast_food|cafe|bar"];
-  way(around:${radius},${lat},${lng})["shop"~"supermarket|department_store|mall|chemist"];
-  way(around:${radius},${lat},${lng})["amenity"~"pharmacy|fuel|restaurant|fast_food|cafe|bar"];
+  node(around:${radius},${lat},${lng})["shop"~"supermarket|convenience|department_store|mall|chemist|health_food|bakery|butcher|seafood|deli|alcohol|beverages|kiosk|general|variety_store|sports|clothes|shoes|bag|jewelry|electronics|mobile_phone|computer|furniture|doityourself|hardware|car|car_repair|pet|cosmetics|beauty|gift|books|stationery"];
+  node(around:${radius},${lat},${lng})["amenity"~"pharmacy|fuel|restaurant|fast_food|cafe|bar|pub|biergarten|food_court|ice_cream|marketplace|bank|atm|cinema|theatre|nightclub"];
+  way(around:${radius},${lat},${lng})["shop"~"supermarket|convenience|department_store|mall|chemist|health_food|bakery|butcher|seafood|deli|alcohol|beverages|kiosk|general|variety_store|sports|clothes|shoes|bag|jewelry|electronics|mobile_phone|computer|furniture|doityourself|hardware|car|car_repair|pet|cosmetics|beauty|gift|books|stationery"];
+  way(around:${radius},${lat},${lng})["amenity"~"pharmacy|fuel|restaurant|fast_food|cafe|bar|pub|biergarten|food_court|ice_cream|marketplace|bank|atm|cinema|theatre|nightclub"];
+  relation(around:${radius},${lat},${lng})["shop"~"supermarket|convenience|department_store|mall|chemist|health_food|bakery|butcher|seafood|deli|alcohol|beverages|kiosk|general|variety_store|sports|clothes|shoes|bag|jewelry|electronics|mobile_phone|computer|furniture|doityourself|hardware|car|car_repair|pet|cosmetics|beauty|gift|books|stationery"];
+  relation(around:${radius},${lat},${lng})["amenity"~"pharmacy|fuel|restaurant|fast_food|cafe|bar|pub|biergarten|food_court|ice_cream|marketplace|bank|atm|cinema|theatre|nightclub"];
 );
 out center tags;
 `;
@@ -54,7 +56,7 @@ function distanceMeters(
 }
 
 async function fetchNearbyPlaces(lat: number, lng: number): Promise<NearbyPlace[]> {
-  const query = buildOverpassQuery(lat, lng, 300);
+  const query = buildOverpassQuery(lat, lng, 500);
   const resp = await fetch("https://overpass-api.de/api/interpreter", {
     method: "POST",
     headers: { "Content-Type": "text/plain" },
@@ -86,7 +88,7 @@ async function fetchNearbyPlaces(lat: number, lng: number): Promise<NearbyPlace[
       distanceMeters: distanceMeters(lat, lng, pLat, pLng),
     });
   }
-  return list.sort((a, b) => a.distanceMeters - b.distanceMeters).slice(0, 12);
+  return list.sort((a, b) => a.distanceMeters - b.distanceMeters).slice(0, 40);
 }
 
 export async function GET(req: NextRequest) {
@@ -136,7 +138,15 @@ export async function GET(req: NextRequest) {
       })
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)[0];
-    if (!best) continue;
+    if (!best) {
+      matches.push({
+        detectedName: p.name,
+        distanceMeters: p.distanceMeters,
+        merchant: null,
+        confidence: 0,
+      });
+      continue;
+    }
     matches.push({
       detectedName: p.name,
       distanceMeters: p.distanceMeters,
@@ -148,7 +158,6 @@ export async function GET(req: NextRequest) {
       },
       confidence: best.score,
     });
-    if (matches.length >= 5) break;
   }
 
   return NextResponse.json({
