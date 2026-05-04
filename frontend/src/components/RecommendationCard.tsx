@@ -74,8 +74,9 @@ export function RecommendationCard({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [payToast, setPayToast] = useState<string | null>(null);
   const [walletPlatform, setWalletPlatform] = useState<WalletPlatform>("other");
+  const [payStripOpen, setPayStripOpen] = useState(false);
+  const [payJustActivated, setPayJustActivated] = useState(false);
 
   useEffect(() => {
     if (typeof navigator === "undefined") return;
@@ -85,29 +86,65 @@ export function RecommendationCard({
   }, []);
 
   useEffect(() => {
-    setPayToast(null);
+    setPayStripOpen(false);
+    setPayJustActivated(false);
   }, [recommendationId, amount, bestCard?.name]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (!payStripOpen) {
+      document.body.style.paddingBottom = "";
+      return;
+    }
+    document.body.style.paddingBottom = "5.75rem";
+    return () => {
+      document.body.style.paddingBottom = "";
+    };
+  }, [payStripOpen]);
 
   const openWalletForPay = () => {
     if (typeof window === "undefined") return;
-    if (walletPlatform === "ios") {
-      window.open("https://wallet.apple.com/", "_blank", "noopener,noreferrer");
+
+    if (walletPlatform === "android") {
+      /**
+       * Prefer resolving the installed Google Wallet app via intent: Chrome resolves
+       * com.google.android.apps.walletnfcrel; falls back to the HTTPS wallet URL.
+       * See https://developer.chrome.com/docs/android/intents
+       */
+      const fallback = encodeURIComponent("https://wallet.google.com/");
+      const intent = `intent://wallet.google.com/#Intent;scheme=https;package=com.google.android.apps.walletnfcrel;S.browser_fallback_url=${fallback};end`;
+      const a = document.createElement("a");
+      a.href = intent;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       return;
     }
-    if (walletPlatform === "android") {
-      window.open("https://wallet.google.com/", "_blank", "noopener,noreferrer");
+
+    if (walletPlatform === "ios") {
+      /**
+       * Apple does not publish a stable public URL scheme to open Wallet from Safari.
+       * Schemes like apple-wallet:// appear in blogs but are undocumented and often blocked.
+       * Apple Pay on the Web uses Payment Request API for merchant checkout — different flow.
+       */
+      window.open("https://wallet.apple.com/", "_blank", "noopener,noreferrer");
     }
   };
 
   const payWithRecommendedCard = async () => {
+    try {
+      navigator.vibrate?.(12);
+    } catch {
+      /* optional */
+    }
+
     if (!bestCard?.last4) {
       openWalletForPay();
-      setPayToast(
-        walletPlatform === "other"
-          ? "Open Wallet on your phone and pick this card."
-          : "Wallet opened in a new tab — select this card at the reader.",
-      );
-      setTimeout(() => setPayToast(null), 4500);
+      setPayStripOpen(true);
+      setPayJustActivated(true);
+      setTimeout(() => setPayJustActivated(false), 700);
       return;
     }
     try {
@@ -116,12 +153,9 @@ export function RecommendationCard({
       /* still open wallet */
     }
     openWalletForPay();
-    setPayToast(
-      walletPlatform === "other"
-        ? `Copied •••• ${bestCard.last4} — open Wallet on your phone.`
-        : `Copied •••• ${bestCard.last4} — Wallet opened; choose this card to pay (Apple & Google do not allow pre-selecting a card from a website).`,
-    );
-    setTimeout(() => setPayToast(null), 5500);
+    setPayStripOpen(true);
+    setPayJustActivated(true);
+    setTimeout(() => setPayJustActivated(false), 700);
   };
 
   const submit = async (kind: MismatchKind) => {
@@ -155,34 +189,23 @@ export function RecommendationCard({
   };
 
   return (
+    <>
     <div className="motion-enter overflow-hidden rounded-3xl border border-zinc-200/80 bg-[var(--surface)] shadow-[0_24px_80px_-32px_rgba(0,0,0,0.35)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/70 dark:shadow-[0_28px_90px_-36px_rgba(0,0,0,0.65)]">
       <div className="relative border-b border-white/10 bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-5 py-5 text-white sm:px-6 sm:py-6">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(800px_200px_at_20%_-40%,rgba(255,255,255,0.35),transparent)] opacity-90" />
-        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
-          {bestCard ? (
-            <CardThumbnail
-              name={bestCard.name}
-              issuer={bestCard.issuer}
-              last4={bestCard.last4}
-              colorHex={bestCard.colorHex}
-              size="md"
-              highlight
-            />
-          ) : null}
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-100/90">
-              Best card for this purchase
+        <div className="relative">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-100/90">
+            Best card for this purchase
+          </p>
+          <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+            {bestCard ? bestCard.name : "Add a card to get recommendations"}
+          </h2>
+          {bestCard && (
+            <p className="mt-1 text-sm text-emerald-50/90">
+              {bestCard.issuer}
+              {bestCard.last4 ? ` · ending ${bestCard.last4}` : ""}
             </p>
-            <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-              {bestCard ? bestCard.name : "Add a card to get recommendations"}
-            </h2>
-            {bestCard && (
-              <p className="mt-1 text-sm text-emerald-50/90">
-                {bestCard.issuer}
-                {bestCard.last4 ? ` · ending ${bestCard.last4}` : ""}
-              </p>
-            )}
-          </div>
+          )}
         </div>
       </div>
 
@@ -293,65 +316,43 @@ export function RecommendationCard({
         )}
 
         {bestCard && (
-          <div className="rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/90 to-white px-4 py-4 dark:border-emerald-900/50 dark:from-emerald-950/30 dark:to-zinc-950/40">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
-              Pay at the terminal
-            </p>
-            <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-              One tap copies your last 4 digits and opens{" "}
-              {walletPlatform === "ios"
-                ? "Wallet on the web"
-                : walletPlatform === "android"
-                  ? "Google Wallet"
-                  : "your wallet"}{" "}
-              in a new tab. Apple and Google do not let websites launch tap-to-pay
-              with a card already picked — choose{" "}
-              <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">
-                •••• {bestCard.last4 ?? "····"}
-              </span>{" "}
-              when you authenticate.
-            </p>
+          <div className="rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/90 to-white px-5 py-6 dark:border-emerald-900/50 dark:from-emerald-950/30 dark:to-zinc-950/40">
+            <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:justify-center sm:gap-8">
+              <CardThumbnail
+                name={bestCard.name}
+                issuer={bestCard.issuer}
+                last4={bestCard.last4}
+                colorHex={bestCard.colorHex}
+                size="lg"
+                className="shadow-xl"
+              />
+              <div className="max-w-sm space-y-3 text-center sm:text-left">
+                <p className="text-lg font-semibold leading-snug text-zinc-900 dark:text-zinc-50">
+                  {walletPlatform === "ios" && "Use this card in Apple Pay"}
+                  {walletPlatform === "android" &&
+                    "Use this card in Google Wallet"}
+                  {walletPlatform === "other" &&
+                    "Use this card in your wallet app"}
+                </p>
+                <p className="font-mono text-4xl font-bold tracking-[0.15em] text-zinc-900 dark:text-zinc-50">
+                  •••• {bestCard.last4 ?? "····"}
+                </p>
+              </div>
+            </div>
 
             <button
               type="button"
               onClick={() => void payWithRecommendedCard()}
-              className="mt-4 flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-r from-[#000] to-zinc-800 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99] dark:from-zinc-800 dark:to-zinc-950"
+              className={`mt-6 w-full rounded-2xl bg-gradient-to-r from-[#000] to-zinc-800 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99] dark:from-zinc-800 dark:to-zinc-950 ${
+                payJustActivated
+                  ? "ring-4 ring-emerald-400/90 ring-offset-2 ring-offset-white dark:ring-offset-zinc-900"
+                  : ""
+              }`}
             >
-              <span>Pay with this card</span>
-              <span className="text-[10px] font-normal text-white/80">
-                Copies •••• {bestCard.last4 ?? "····"} · opens Wallet
-              </span>
+              {walletPlatform === "ios" && "Open Apple Wallet"}
+              {walletPlatform === "android" && "Open Google Wallet"}
+              {walletPlatform === "other" && "Open wallet"}
             </button>
-
-            {payToast ? (
-              <p className="mt-3 text-xs font-medium text-emerald-800 dark:text-emerald-200">
-                {payToast}
-              </p>
-            ) : null}
-
-            <div className="mt-4 rounded-xl border border-zinc-200/80 bg-white/60 px-3 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                At the reader
-              </p>
-              {walletPlatform === "ios" ? (
-                <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
-                  <li>Double-click the side button for Apple Pay.</li>
-                  <li>Select the card ending in {bestCard.last4 ?? "····"}.</li>
-                  <li>Authenticate, then hold your phone to the terminal.</li>
-                </ol>
-              ) : walletPlatform === "android" ? (
-                <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
-                  <li>Wake Google Wallet if prompted.</li>
-                  <li>Use the card ending in {bestCard.last4 ?? "····"}.</li>
-                  <li>Hold the back of the phone to the reader.</li>
-                </ol>
-              ) : (
-                <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-                  On your phone, open Wallet and pick the card above before
-                  tapping to pay.
-                </p>
-              )}
-            </div>
           </div>
         )}
 
@@ -396,5 +397,52 @@ export function RecommendationCard({
         </div>
       </div>
     </div>
+
+    {payStripOpen && bestCard ? (
+      <div
+        className="motion-enter fixed inset-x-0 bottom-0 z-[100] border-t border-emerald-500/25 bg-[var(--surface)]/95 px-3 py-3 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.2)] backdrop-blur-xl dark:border-emerald-900/30 dark:bg-zinc-950/95"
+        style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+        role="status"
+        aria-label="Card digits for checkout"
+      >
+        <div className="mx-auto flex max-w-lg items-center gap-3">
+          <CardThumbnail
+            name={bestCard.name}
+            issuer={bestCard.issuer}
+            last4={bestCard.last4}
+            colorHex={bestCard.colorHex}
+            size="sm"
+          />
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              Same card
+            </p>
+            <p className="font-mono text-2xl font-bold tabular-nums tracking-[0.2em] text-zinc-900 dark:text-zinc-50">
+              •••• {bestCard.last4 ?? "····"}
+            </p>
+            <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+              {bestCard.name}
+            </p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <button
+              type="button"
+              onClick={() => void payWithRecommendedCard()}
+              className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-emerald-500 active:scale-[0.98]"
+            >
+              Open again
+            </button>
+            <button
+              type="button"
+              onClick={() => setPayStripOpen(false)}
+              className="text-[11px] font-medium text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : null}
+    </>
   );
 }
