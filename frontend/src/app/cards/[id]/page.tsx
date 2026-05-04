@@ -6,6 +6,7 @@ import {
   CardCatalogSuggest,
   type CatalogTemplate,
 } from "@/components/CardCatalogSuggest";
+import { CardThumbnail } from "@/components/CardThumbnail";
 import { apiFetch, ApiError } from "@/lib/api";
 
 const CATEGORIES = [
@@ -152,6 +153,15 @@ export default function EditCardPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <h1 className="text-2xl font-semibold">Edit card</h1>
+      <div className="flex justify-center rounded-2xl border border-zinc-200/70 bg-zinc-50/80 py-6 dark:border-zinc-800 dark:bg-zinc-950/40">
+        <CardThumbnail
+          name={name || "Card"}
+          issuer={issuer || "Issuer"}
+          last4={last4 || null}
+          colorHex={colorHex}
+          size="lg"
+        />
+      </div>
       <form onSubmit={save} className="space-y-4">
         <CardCatalogSuggest onApply={applyCatalog} />
         <div className="grid gap-4 sm:grid-cols-2">

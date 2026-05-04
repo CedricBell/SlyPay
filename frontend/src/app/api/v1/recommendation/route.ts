@@ -152,14 +152,19 @@ export async function POST(req: NextRequest) {
       : null,
     reasoning: engineResult.winner?.explanationLines ?? [],
     alternatesTied: engineResult.alternatesTied,
-    ranked: engineResult.ranked.map((r) => ({
-      cardId: r.cardId,
-      cardName: r.cardName,
-      issuer: r.issuer,
-      comparableValue: r.comparableValue,
-      effectiveMultiplier: r.effectiveMultiplier,
-      earningType: r.earningType,
-    })),
+    ranked: engineResult.ranked.map((r) => {
+      const card = dbCards.find((c) => c.id === r.cardId);
+      return {
+        cardId: r.cardId,
+        cardName: r.cardName,
+        issuer: r.issuer,
+        comparableValue: r.comparableValue,
+        effectiveMultiplier: r.effectiveMultiplier,
+        earningType: r.earningType,
+        last4: card?.last4 ?? null,
+        colorHex: card?.colorHex ?? null,
+      };
+    }),
     marketBest: marketResult.winner
       ? {
           cardId: marketResult.winner.cardId,

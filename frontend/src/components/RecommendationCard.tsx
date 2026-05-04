@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
+import { CardThumbnail } from "@/components/CardThumbnail";
 
 type Ranked = {
   cardId: string;
@@ -10,6 +11,8 @@ type Ranked = {
   comparableValue: number;
   effectiveMultiplier: number;
   earningType: string;
+  last4?: string | null;
+  colorHex?: string | null;
 };
 
 export type MismatchKind =
@@ -22,7 +25,12 @@ export type MismatchKind =
 type Props = {
   amount: number;
   resolvedCategory: string;
-  bestCard: { name: string; issuer: string; last4: string | null } | null;
+  bestCard: {
+    name: string;
+    issuer: string;
+    last4: string | null;
+    colorHex?: string | null;
+  } | null;
   reasoning: string[];
   ranked: Ranked[];
   alternatesTied: string[];
@@ -66,8 +74,7 @@ export function RecommendationCard({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [payExpanded, setPayExpanded] = useState(false);
-  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const [payToast, setPayToast] = useState<string | null>(null);
   const [walletPlatform, setWalletPlatform] = useState<WalletPlatform>("other");
 
   useEffect(() => {
@@ -78,8 +85,44 @@ export function RecommendationCard({
   }, []);
 
   useEffect(() => {
-    setPayExpanded(false);
+    setPayToast(null);
   }, [recommendationId, amount, bestCard?.name]);
+
+  const openWalletForPay = () => {
+    if (typeof window === "undefined") return;
+    if (walletPlatform === "ios") {
+      window.open("https://wallet.apple.com/", "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (walletPlatform === "android") {
+      window.open("https://wallet.google.com/", "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const payWithRecommendedCard = async () => {
+    if (!bestCard?.last4) {
+      openWalletForPay();
+      setPayToast(
+        walletPlatform === "other"
+          ? "Open Wallet on your phone and pick this card."
+          : "Wallet opened in a new tab — select this card at the reader.",
+      );
+      setTimeout(() => setPayToast(null), 4500);
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(bestCard.last4);
+    } catch {
+      /* still open wallet */
+    }
+    openWalletForPay();
+    setPayToast(
+      walletPlatform === "other"
+        ? `Copied •••• ${bestCard.last4} — open Wallet on your phone.`
+        : `Copied •••• ${bestCard.last4} — Wallet opened; choose this card to pay (Apple & Google do not allow pre-selecting a card from a website).`,
+    );
+    setTimeout(() => setPayToast(null), 5500);
+  };
 
   const submit = async (kind: MismatchKind) => {
     setBusy(true);
@@ -115,19 +158,31 @@ export function RecommendationCard({
     <div className="motion-enter overflow-hidden rounded-3xl border border-zinc-200/80 bg-[var(--surface)] shadow-[0_24px_80px_-32px_rgba(0,0,0,0.35)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/70 dark:shadow-[0_28px_90px_-36px_rgba(0,0,0,0.65)]">
       <div className="relative border-b border-white/10 bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-5 py-5 text-white sm:px-6 sm:py-6">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(800px_200px_at_20%_-40%,rgba(255,255,255,0.35),transparent)] opacity-90" />
-        <div className="relative">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-100/90">
-            Best card for this purchase
-          </p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-            {bestCard ? bestCard.name : "Add a card to get recommendations"}
-          </h2>
-          {bestCard && (
-            <p className="mt-1 text-sm text-emerald-50/90">
-              {bestCard.issuer}
-              {bestCard.last4 ? ` · ending ${bestCard.last4}` : ""}
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
+          {bestCard ? (
+            <CardThumbnail
+              name={bestCard.name}
+              issuer={bestCard.issuer}
+              last4={bestCard.last4}
+              colorHex={bestCard.colorHex}
+              size="md"
+              highlight
+            />
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-100/90">
+              Best card for this purchase
             </p>
-          )}
+            <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
+              {bestCard ? bestCard.name : "Add a card to get recommendations"}
+            </h2>
+            {bestCard && (
+              <p className="mt-1 text-sm text-emerald-50/90">
+                {bestCard.issuer}
+                {bestCard.last4 ? ` · ending ${bestCard.last4}` : ""}
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -210,14 +265,23 @@ export function RecommendationCard({
               {ranked.map((r, idx) => (
                 <li
                   key={r.cardId}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/70 bg-white/60 px-3 py-2.5 transition hover:border-emerald-300/50 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:hover:border-emerald-900/40"
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/70 bg-white/60 px-2 py-2 pl-2 transition hover:border-emerald-300/50 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:hover:border-emerald-900/40"
                 >
-                  <span className="min-w-0">
-                    <span className="text-zinc-400">{idx + 1}. </span>
-                    <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                      {r.cardName}
-                    </span>{" "}
-                    <span className="text-zinc-500">({r.issuer})</span>
+                  <span className="flex min-w-0 items-center gap-2.5">
+                    <CardThumbnail
+                      name={r.cardName}
+                      issuer={r.issuer}
+                      last4={r.last4}
+                      colorHex={r.colorHex}
+                      size="xs"
+                    />
+                    <span className="min-w-0">
+                      <span className="text-zinc-400">{idx + 1}. </span>
+                      <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                        {r.cardName}
+                      </span>{" "}
+                      <span className="text-zinc-500">({r.issuer})</span>
+                    </span>
                   </span>
                   <span className="shrink-0 font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
                     {r.effectiveMultiplier}x · {r.comparableValue.toFixed(2)}
@@ -234,113 +298,60 @@ export function RecommendationCard({
               Pay at the terminal
             </p>
             <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-              Browsers cannot open Apple Pay or Google Pay with a specific card
-              pre-selected for tap-to-pay — pick the card ending in{" "}
+              One tap copies your last 4 digits and opens{" "}
+              {walletPlatform === "ios"
+                ? "Wallet on the web"
+                : walletPlatform === "android"
+                  ? "Google Wallet"
+                  : "your wallet"}{" "}
+              in a new tab. Apple and Google do not let websites launch tap-to-pay
+              with a card already picked — choose{" "}
               <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">
-                {bestCard.last4 ?? "····"}
+                •••• {bestCard.last4 ?? "····"}
               </span>{" "}
-              when your phone prompts you.
+              when you authenticate.
             </p>
-            {!payExpanded ? (
-              <button
-                type="button"
-                onClick={() => setPayExpanded(true)}
-                className="mt-4 w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3 text-sm font-semibold text-white shadow-md transition hover:brightness-110 active:scale-[0.99]"
-              >
-                I&apos;m using this card — show wallet steps
-              </button>
-            ) : (
-              <div className="mt-4 space-y-4">
-                <div className="rounded-xl border border-white/30 bg-white/70 px-4 py-3 text-center dark:border-emerald-900/40 dark:bg-zinc-950/50">
-                  <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
-                    Select this card in your wallet
-                  </p>
-                  <p className="mt-1 font-mono text-3xl font-semibold tracking-widest text-zinc-900 dark:text-zinc-50">
-                    •••• {bestCard.last4 ?? "····"}
-                  </p>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    {bestCard.name} · {bestCard.issuer}
-                  </p>
-                </div>
 
-                <div className="flex flex-wrap gap-2">
-                  {bestCard.last4 ? (
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(bestCard.last4!);
-                          setCopyMsg("Last 4 copied.");
-                          setTimeout(() => setCopyMsg(null), 2000);
-                        } catch {
-                          setCopyMsg("Could not copy — note the digits above.");
-                          setTimeout(() => setCopyMsg(null), 2500);
-                        }
-                      }}
-                      className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-                    >
-                      Copy last 4 digits
-                    </button>
-                  ) : null}
-                  {walletPlatform === "android" ? (
-                    <a
-                      href="https://wallet.google.com/"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center rounded-xl border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-                    >
-                      Open Google Wallet
-                    </a>
-                  ) : null}
-                </div>
+            <button
+              type="button"
+              onClick={() => void payWithRecommendedCard()}
+              className="mt-4 flex w-full flex-col items-center justify-center gap-0.5 rounded-2xl bg-gradient-to-r from-[#000] to-zinc-800 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99] dark:from-zinc-800 dark:to-zinc-950"
+            >
+              <span>Pay with this card</span>
+              <span className="text-[10px] font-normal text-white/80">
+                Copies •••• {bestCard.last4 ?? "····"} · opens Wallet
+              </span>
+            </button>
 
-                {walletPlatform === "ios" ? (
-                  <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
-                    <li>
-                      Double-click the side button (or Home + Side on older
-                      models) to bring up Wallet / Apple Pay.
-                    </li>
-                    <li>
-                      Swipe or tap your cards until you see one ending in{" "}
-                      <span className="font-mono">{bestCard.last4 ?? "····"}</span>.
-                    </li>
-                    <li>
-                      Authenticate with Face ID / Touch ID, then hold near the
-                      reader.
-                    </li>
-                  </ol>
-                ) : walletPlatform === "android" ? (
-                  <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
-                    <li>Open Google Wallet (shortcut above if installed).</li>
-                    <li>
-                      Tap to pay — choose the card ending in{" "}
-                      <span className="font-mono">{bestCard.last4 ?? "····"}</span>{" "}
-                      if prompted.
-                    </li>
-                    <li>Hold the back of your phone to the terminal.</li>
-                  </ol>
-                ) : (
-                  <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-                    On your phone, open your wallet app and select the matching
-                    card before tapping to pay.
-                  </p>
-                )}
+            {payToast ? (
+              <p className="mt-3 text-xs font-medium text-emerald-800 dark:text-emerald-200">
+                {payToast}
+              </p>
+            ) : null}
 
-                {copyMsg && (
-                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                    {copyMsg}
-                  </p>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setPayExpanded(false)}
-                  className="text-xs font-medium text-zinc-500 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-300"
-                >
-                  Collapse
-                </button>
-              </div>
-            )}
+            <div className="mt-4 rounded-xl border border-zinc-200/80 bg-white/60 px-3 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                At the reader
+              </p>
+              {walletPlatform === "ios" ? (
+                <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
+                  <li>Double-click the side button for Apple Pay.</li>
+                  <li>Select the card ending in {bestCard.last4 ?? "····"}.</li>
+                  <li>Authenticate, then hold your phone to the terminal.</li>
+                </ol>
+              ) : walletPlatform === "android" ? (
+                <ol className="mt-2 list-decimal space-y-1 pl-4 text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
+                  <li>Wake Google Wallet if prompted.</li>
+                  <li>Use the card ending in {bestCard.last4 ?? "····"}.</li>
+                  <li>Hold the back of the phone to the reader.</li>
+                </ol>
+              ) : (
+                <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                  On your phone, open Wallet and pick the card above before
+                  tapping to pay.
+                </p>
+              )}
+            </div>
           </div>
         )}
 

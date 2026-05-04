@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { CardThumbnail } from "@/components/CardThumbnail";
 import { apiFetch, ApiError } from "@/lib/api";
 
 type CardRow = {
@@ -59,10 +60,16 @@ export default function CardsPage() {
           <li key={c.id}>
             <Link
               href={`/cards/${c.id}`}
-              className="flex items-center justify-between gap-3 rounded-3xl border border-zinc-200/70 bg-[var(--surface)] px-4 py-4 shadow-sm backdrop-blur-xl transition hover:border-emerald-400/35 hover:shadow-md active:scale-[0.99] dark:border-zinc-800/80 dark:hover:border-emerald-800/30"
-              style={{ borderLeftWidth: 4, borderLeftColor: c.colorHex ?? "#0f172a" }}
+              className="flex items-center justify-between gap-4 rounded-3xl border border-zinc-200/70 bg-[var(--surface)] px-4 py-4 shadow-sm backdrop-blur-xl transition hover:border-emerald-400/35 hover:shadow-md active:scale-[0.99] dark:border-zinc-800/80 dark:hover:border-emerald-800/30"
             >
-              <div className="min-w-0">
+              <CardThumbnail
+                name={c.name}
+                issuer={c.issuer}
+                last4={c.last4}
+                colorHex={c.colorHex}
+                size="md"
+              />
+              <div className="min-w-0 flex-1">
                 <p className="font-semibold text-zinc-900 dark:text-zinc-50">{c.name}</p>
                 <p className="text-sm text-zinc-500">
                   {c.issuer}

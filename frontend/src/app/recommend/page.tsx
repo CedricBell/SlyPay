@@ -28,6 +28,7 @@ type RecRes = {
     name: string;
     issuer: string;
     last4: string | null;
+    colorHex?: string | null;
   } | null;
   reasoning: string[];
   ranked: Array<{
@@ -37,6 +38,8 @@ type RecRes = {
     comparableValue: number;
     effectiveMultiplier: number;
     earningType: string;
+    last4?: string | null;
+    colorHex?: string | null;
   }>;
   alternatesTied: string[];
   marketBest: {
