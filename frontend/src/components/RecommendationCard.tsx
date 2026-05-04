@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { apiFetch, ApiError } from "@/lib/api";
 
 type Ranked = {
@@ -40,6 +40,8 @@ type Props = {
   merchantLabel?: string | null;
 };
 
+type WalletPlatform = "ios" | "android" | "other";
+
 const MISMATCH_OPTIONS: { kind: MismatchKind; label: string }[] = [
   { kind: "WRONG_MERCHANT", label: "Wrong store" },
   { kind: "WRONG_CATEGORY", label: "Wrong category" },
@@ -64,6 +66,20 @@ export function RecommendationCard({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [payExpanded, setPayExpanded] = useState(false);
+  const [copyMsg, setCopyMsg] = useState<string | null>(null);
+  const [walletPlatform, setWalletPlatform] = useState<WalletPlatform>("other");
+
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    const ua = navigator.userAgent;
+    if (/iPad|iPhone|iPod/.test(ua)) setWalletPlatform("ios");
+    else if (/Android/.test(ua)) setWalletPlatform("android");
+  }, []);
+
+  useEffect(() => {
+    setPayExpanded(false);
+  }, [recommendationId, amount, bestCard?.name]);
 
   const submit = async (kind: MismatchKind) => {
     setBusy(true);
@@ -209,6 +225,122 @@ export function RecommendationCard({
                 </li>
               ))}
             </ol>
+          </div>
+        )}
+
+        {bestCard && (
+          <div className="rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/90 to-white px-4 py-4 dark:border-emerald-900/50 dark:from-emerald-950/30 dark:to-zinc-950/40">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-800 dark:text-emerald-200">
+              Pay at the terminal
+            </p>
+            <p className="mt-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+              Browsers cannot open Apple Pay or Google Pay with a specific card
+              pre-selected for tap-to-pay — pick the card ending in{" "}
+              <span className="font-mono font-semibold text-zinc-800 dark:text-zinc-200">
+                {bestCard.last4 ?? "····"}
+              </span>{" "}
+              when your phone prompts you.
+            </p>
+            {!payExpanded ? (
+              <button
+                type="button"
+                onClick={() => setPayExpanded(true)}
+                className="mt-4 w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3 text-sm font-semibold text-white shadow-md transition hover:brightness-110 active:scale-[0.99]"
+              >
+                I&apos;m using this card — show wallet steps
+              </button>
+            ) : (
+              <div className="mt-4 space-y-4">
+                <div className="rounded-xl border border-white/30 bg-white/70 px-4 py-3 text-center dark:border-emerald-900/40 dark:bg-zinc-950/50">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">
+                    Select this card in your wallet
+                  </p>
+                  <p className="mt-1 font-mono text-3xl font-semibold tracking-widest text-zinc-900 dark:text-zinc-50">
+                    •••• {bestCard.last4 ?? "····"}
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    {bestCard.name} · {bestCard.issuer}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {bestCard.last4 ? (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(bestCard.last4!);
+                          setCopyMsg("Last 4 copied.");
+                          setTimeout(() => setCopyMsg(null), 2000);
+                        } catch {
+                          setCopyMsg("Could not copy — note the digits above.");
+                          setTimeout(() => setCopyMsg(null), 2500);
+                        }
+                      }}
+                      className="rounded-xl border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      Copy last 4 digits
+                    </button>
+                  ) : null}
+                  {walletPlatform === "android" ? (
+                    <a
+                      href="https://wallet.google.com/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center rounded-xl border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+                    >
+                      Open Google Wallet
+                    </a>
+                  ) : null}
+                </div>
+
+                {walletPlatform === "ios" ? (
+                  <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
+                    <li>
+                      Double-click the side button (or Home + Side on older
+                      models) to bring up Wallet / Apple Pay.
+                    </li>
+                    <li>
+                      Swipe or tap your cards until you see one ending in{" "}
+                      <span className="font-mono">{bestCard.last4 ?? "····"}</span>.
+                    </li>
+                    <li>
+                      Authenticate with Face ID / Touch ID, then hold near the
+                      reader.
+                    </li>
+                  </ol>
+                ) : walletPlatform === "android" ? (
+                  <ol className="list-decimal space-y-1.5 pl-5 text-xs leading-relaxed text-zinc-700 dark:text-zinc-300">
+                    <li>Open Google Wallet (shortcut above if installed).</li>
+                    <li>
+                      Tap to pay — choose the card ending in{" "}
+                      <span className="font-mono">{bestCard.last4 ?? "····"}</span>{" "}
+                      if prompted.
+                    </li>
+                    <li>Hold the back of your phone to the terminal.</li>
+                  </ol>
+                ) : (
+                  <p className="text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                    On your phone, open your wallet app and select the matching
+                    card before tapping to pay.
+                  </p>
+                )}
+
+                {copyMsg && (
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                    {copyMsg}
+                  </p>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setPayExpanded(false)}
+                  className="text-xs font-medium text-zinc-500 underline underline-offset-2 hover:text-zinc-700 dark:hover:text-zinc-300"
+                >
+                  Collapse
+                </button>
+              </div>
+            )}
           </div>
         )}
 

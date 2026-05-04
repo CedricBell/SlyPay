@@ -2,19 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { SpendCategory } from "@prisma/client";
 import { getSessionAppUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
+import { loadNearbyPlaces } from "@/server/nearby-places";
 
 function normalizeSearch(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-type NearbyPlace = {
+type NearbyRow = {
   name: string;
   distanceMeters: number;
+  source: "osm" | "google";
 };
 
 type NearbyMatch = {
   detectedName: string;
   distanceMeters: number;
+  source: "osm" | "google";
   merchant: {
     id: string;
     displayName: string;
@@ -22,74 +25,9 @@ type NearbyMatch = {
     categoryHint: SpendCategory | null;
   } | null;
   confidence: number;
+  /** When no DB merchant match — OSM/Google-derived spend category */
+  suggestedCategoryHint: SpendCategory | null;
 };
-
-function buildOverpassQuery(lat: number, lng: number, radius = 250): string {
-  return `
-[out:json][timeout:8];
-(
-  node(around:${radius},${lat},${lng})["shop"~"supermarket|convenience|department_store|mall|chemist|health_food|bakery|butcher|seafood|deli|alcohol|beverages|kiosk|general|variety_store|sports|clothes|shoes|bag|jewelry|electronics|mobile_phone|computer|furniture|doityourself|hardware|car|car_repair|pet|cosmetics|beauty|gift|books|stationery"];
-  node(around:${radius},${lat},${lng})["amenity"~"pharmacy|fuel|restaurant|fast_food|cafe|bar|pub|biergarten|food_court|ice_cream|marketplace|bank|atm|cinema|theatre|nightclub"];
-  way(around:${radius},${lat},${lng})["shop"~"supermarket|convenience|department_store|mall|chemist|health_food|bakery|butcher|seafood|deli|alcohol|beverages|kiosk|general|variety_store|sports|clothes|shoes|bag|jewelry|electronics|mobile_phone|computer|furniture|doityourself|hardware|car|car_repair|pet|cosmetics|beauty|gift|books|stationery"];
-  way(around:${radius},${lat},${lng})["amenity"~"pharmacy|fuel|restaurant|fast_food|cafe|bar|pub|biergarten|food_court|ice_cream|marketplace|bank|atm|cinema|theatre|nightclub"];
-  relation(around:${radius},${lat},${lng})["shop"~"supermarket|convenience|department_store|mall|chemist|health_food|bakery|butcher|seafood|deli|alcohol|beverages|kiosk|general|variety_store|sports|clothes|shoes|bag|jewelry|electronics|mobile_phone|computer|furniture|doityourself|hardware|car|car_repair|pet|cosmetics|beauty|gift|books|stationery"];
-  relation(around:${radius},${lat},${lng})["amenity"~"pharmacy|fuel|restaurant|fast_food|cafe|bar|pub|biergarten|food_court|ice_cream|marketplace|bank|atm|cinema|theatre|nightclub"];
-);
-out center tags;
-`;
-}
-
-function distanceMeters(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number,
-): number {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const R = 6371000;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return Math.round(2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
-}
-
-async function fetchNearbyPlaces(lat: number, lng: number): Promise<NearbyPlace[]> {
-  const query = buildOverpassQuery(lat, lng, 500);
-  const resp = await fetch("https://overpass-api.de/api/interpreter", {
-    method: "POST",
-    headers: { "Content-Type": "text/plain" },
-    body: query,
-    cache: "no-store",
-  });
-  if (!resp.ok) return [];
-  const data = (await resp.json()) as {
-    elements?: Array<{
-      lat?: number;
-      lon?: number;
-      center?: { lat: number; lon: number };
-      tags?: { name?: string };
-    }>;
-  };
-  const seen = new Set<string>();
-  const list: NearbyPlace[] = [];
-  for (const e of data.elements ?? []) {
-    const name = e.tags?.name?.trim();
-    if (!name) continue;
-    const key = normalizeSearch(name);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    const pLat = e.lat ?? e.center?.lat;
-    const pLng = e.lon ?? e.center?.lon;
-    if (typeof pLat !== "number" || typeof pLng !== "number") continue;
-    list.push({
-      name,
-      distanceMeters: distanceMeters(lat, lng, pLat, pLng),
-    });
-  }
-  return list.sort((a, b) => a.distanceMeters - b.distanceMeters).slice(0, 40);
-}
 
 export async function GET(req: NextRequest) {
   const ctx = await getSessionAppUser();
@@ -103,14 +41,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: "Invalid coordinates" }, { status: 400 });
   }
 
-  const nearby = await fetchNearbyPlaces(lat, lng);
-  if (nearby.length === 0) {
-    return NextResponse.json({ nearby: [], matches: [] });
+  const { places, sources } = await loadNearbyPlaces(lat, lng);
+  if (places.length === 0) {
+    return NextResponse.json({
+      nearby: [],
+      matches: [],
+      sources,
+    });
   }
+
+  const nearby: NearbyRow[] = places.map((p) => ({
+    name: p.name,
+    distanceMeters: p.distanceMeters,
+    source: p.source,
+  }));
 
   const dbMerchants = await prisma.merchant.findMany({
     where: {
-      OR: nearby.flatMap((p) => {
+      OR: places.flatMap((p) => {
         const n = normalizeSearch(p.name);
         const loose = p.name.toLowerCase().trim();
         return [
@@ -120,11 +68,11 @@ export async function GET(req: NextRequest) {
       }),
     },
     include: { categoryMappings: true },
-    take: 30,
+    take: 40,
   });
 
   const matches: NearbyMatch[] = [];
-  for (const p of nearby) {
+  for (const p of places) {
     const n = normalizeSearch(p.name);
     const best = dbMerchants
       .map((m) => {
@@ -138,18 +86,23 @@ export async function GET(req: NextRequest) {
       })
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)[0];
+
     if (!best) {
       matches.push({
         detectedName: p.name,
         distanceMeters: p.distanceMeters,
+        source: p.source,
         merchant: null,
         confidence: 0,
+        suggestedCategoryHint: p.suggestedCategoryHint,
       });
       continue;
     }
+
     matches.push({
       detectedName: p.name,
       distanceMeters: p.distanceMeters,
+      source: p.source,
       merchant: {
         id: best.merchant.id,
         displayName: best.merchant.displayName,
@@ -157,12 +110,13 @@ export async function GET(req: NextRequest) {
         categoryHint: best.merchant.categoryMappings[0]?.category ?? null,
       },
       confidence: best.score,
+      suggestedCategoryHint: null,
     });
   }
 
   return NextResponse.json({
     nearby,
     matches,
+    sources,
   });
 }
-

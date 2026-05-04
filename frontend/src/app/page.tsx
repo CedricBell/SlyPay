@@ -5,15 +5,15 @@ export default function HomePage() {
     <div className="motion-enter space-y-14 py-6 md:py-10">
       <section className="space-y-6 text-center sm:text-left">
         <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-600 dark:text-emerald-400">
-          Real-time credit card decision engine
+          SlyPay · In-store & online
         </p>
         <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl md:text-6xl">
-          Use the right card at checkout—every time.
+          The right card before Apple Pay or Google Pay.
         </h1>
         <p className="mx-auto max-w-2xl text-lg leading-relaxed text-zinc-600 dark:text-zinc-400 sm:mx-0">
-          SlyPay combines your wallet rules, limited-time offers, and merchant
-          signals (including MCC-style mappings) to recommend the best card per
-          purchase—not a generic “best card” blog post.
+          Walk into a store, let SlyPay read your location, and get an explainable
+          pick for points and cashback. Confirm the card, then pay at the
+          terminal with your digital wallet using the matching physical card.
         </p>
         <div className="flex flex-wrap justify-center gap-3 sm:justify-start">
           <Link
@@ -33,16 +33,16 @@ export default function HomePage() {
       <section className="grid gap-4 sm:grid-cols-3">
         {[
           {
-            t: "Rules + offers",
-            d: "Base earn rates and promos are evaluated together with explicit stack semantics.",
+            t: "Nearby businesses",
+            d: "OpenStreetMap plus optional Google Places discover restaurants, shops, fuel, and more near you.",
           },
           {
-            t: "Merchant aware",
-            d: "Known merchants and MCC reference data resolve spend categories before ranking.",
+            t: "Rewards math",
+            d: "Your rules and limited-time offers are stacked with clear reasoning—not a generic blog ranking.",
           },
           {
-            t: "Explainable",
-            d: "Every recommendation returns human-readable reasoning for trust and debugging.",
+            t: "Wallet-ready",
+            d: "After you confirm the card, step-by-step guidance for Apple Pay or Google Pay at the reader.",
           },
         ].map((x) => (
           <div

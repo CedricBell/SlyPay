@@ -13,9 +13,16 @@ type Props = {
   value: string;
   onChange: (v: string) => void;
   onPick?: (m: MerchantRow) => void;
+  /** Fires on real typing — clear map-derived category hints when user edits manually */
+  onUserInput?: () => void;
 };
 
-export function MerchantInput({ value, onChange, onPick }: Props) {
+export function MerchantInput({
+  value,
+  onChange,
+  onPick,
+  onUserInput,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [hits, setHits] = useState<MerchantRow[]>([]);
@@ -54,7 +61,10 @@ export function MerchantInput({ value, onChange, onPick }: Props) {
         value={value}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          onUserInput?.();
+          onChange(e.target.value);
+        }}
         autoComplete="off"
       />
       {open && (hits.length > 0 || loading) && (

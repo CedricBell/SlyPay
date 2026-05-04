@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { SpendCategory } from "@prisma/client";
 import { MerchantInput } from "@/components/MerchantInput";
 import { RecommendationCard } from "@/components/RecommendationCard";
 import { WalletCardList } from "@/components/WalletCardList";
@@ -52,17 +53,20 @@ type RecRes = {
 type NearbyMatch = {
   detectedName: string;
   distanceMeters: number;
+  source?: "osm" | "google";
   merchant: {
     id: string;
     displayName: string;
     mcc: string | null;
   } | null;
   confidence: number;
+  suggestedCategoryHint?: SpendCategory | null;
 };
 
 type NearbyResponse = {
-  nearby: Array<{ name: string; distanceMeters: number }>;
+  nearby: Array<{ name: string; distanceMeters: number; source?: string }>;
   matches: NearbyMatch[];
+  sources?: Array<"osm" | "google">;
 };
 
 type ConfidenceTier = "high" | "medium" | "low";
@@ -115,6 +119,9 @@ export default function RecommendPage() {
   const [activeTier, setActiveTier] = useState<ConfidenceTier | null>(null);
   const [oneTapBanner, setOneTapBanner] = useState<string | null>(null);
   const [topDetectedName, setTopDetectedName] = useState<string | null>(null);
+  /** Spend category inferred from OSM/Google when the DB has no merchant row */
+  const [placeCategoryHint, setPlaceCategoryHint] =
+    useState<SpendCategory | null>(null);
 
   useEffect(() => {
     try {
@@ -157,6 +164,8 @@ export default function RecommendPage() {
       amountUsd?: number;
       /** When false, do not clear the one-tap banner before run (used for auto-run). */
       clearBanner?: boolean;
+      /** Set to null after synchronous detectNearby + DB match so stale place hints are ignored */
+      categoryHint?: SpendCategory | null;
     }) => {
       setErr(null);
       setLoading(true);
@@ -172,6 +181,13 @@ export default function RecommendPage() {
           mcc: String(mccRaw).replace(/\D/g, "").slice(0, 4) || undefined,
           persist: true,
         };
+        const effectiveHint =
+          override && "categoryHint" in override
+            ? override.categoryHint
+            : placeCategoryHint;
+        if (effectiveHint) {
+          payload.categoryHint = effectiveHint;
+        }
         const res = await apiFetch<RecRes>("/recommendation", {
           method: "POST",
           body: JSON.stringify(payload),
@@ -190,19 +206,21 @@ export default function RecommendPage() {
         setLoading(false);
       }
     },
-    [amount, merchant, mcc],
+    [amount, merchant, mcc, placeCategoryHint],
   );
 
   const applyMatch = (m: NearbyMatch) => {
     if (!m.merchant) {
       setMerchant(m.detectedName);
       setMcc("");
+      setPlaceCategoryHint(m.suggestedCategoryHint ?? null);
       setActiveTier("low");
       setTopDetectedName(m.detectedName);
       return;
     }
     setMerchant(m.merchant.displayName);
     if (m.merchant.mcc) setMcc(m.merchant.mcc);
+    setPlaceCategoryHint(null);
     setActiveTier(confidenceTier(m));
     setTopDetectedName(m.detectedName);
   };
@@ -249,6 +267,11 @@ export default function RecommendPage() {
       });
       const lat = pos.coords.latitude;
       const lng = pos.coords.longitude;
+      const accM =
+        typeof pos.coords.accuracy === "number" &&
+        Number.isFinite(pos.coords.accuracy)
+          ? Math.round(pos.coords.accuracy)
+          : null;
       const data = await apiFetch<NearbyResponse>(
         `/merchants/nearby?lat=${lat}&lng=${lng}`,
       );
@@ -266,7 +289,15 @@ export default function RecommendPage() {
       applyMatch(top);
       const tier = confidenceTier(top);
       const topName = top.merchant?.displayName ?? top.detectedName;
-      setGeoMsg(`Detected nearby: ${topName} (${top.distanceMeters}m).`);
+      const srcLabel =
+        data.sources?.includes("google") && data.sources?.includes("osm")
+          ? "OpenStreetMap + Google Places"
+          : "OpenStreetMap";
+      const accBit =
+        accM !== null ? ` · GPS ±${accM}m` : "";
+      setGeoMsg(
+        `Detected nearby: ${topName} (${top.distanceMeters}m)${accBit}. Sources: ${srcLabel}.`,
+      );
       if (tier === "high" && top.merchant) {
         setOneTapBanner(
           `Recommended now for ${top.merchant.displayName} — adjust amount or store if needed.`,
@@ -276,6 +307,7 @@ export default function RecommendPage() {
           mcc: top.merchant.mcc,
           amountUsd: Number(amount),
           clearBanner: false,
+          categoryHint: null,
         });
       } else if (tier === "medium" && top.merchant) {
         setOneTapBanner(
@@ -298,6 +330,7 @@ export default function RecommendPage() {
     if (!top) {
       setMerchant("");
       setMcc("");
+      setPlaceCategoryHint(null);
       setActiveTier(null);
       setTopDetectedName(null);
       return;
@@ -320,6 +353,7 @@ export default function RecommendPage() {
     } else {
       setMerchant("");
       setMcc("");
+      setPlaceCategoryHint(null);
       setActiveTier(null);
       setTopDetectedName(null);
       setGeoMsg("No other known matches nearby. Type the merchant manually.");
@@ -333,15 +367,20 @@ export default function RecommendPage() {
     <div className="motion-enter space-y-8">
       <div className="space-y-2">
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">
-          In the moment
+          In-store assistant
         </p>
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-          Recommendation
+          Right card before you tap to pay
         </h1>
         <p className="max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-          Nearby mode can prefill the store, score match confidence, and run a
-          one-tap recommendation when we are sure. You can always correct the
-          merchant or report a mismatch.
+          At checkout, use your location once to match nearby businesses
+          (restaurants, shops, gas, pharmacies, and more). SlyPay ranks your
+          wallet by rewards and cashback for this purchase, explains the math,
+          then guides you to Apple Pay or Google Pay with the{" "}
+          <span className="font-medium text-zinc-800 dark:text-zinc-200">
+            correct physical card
+          </span>{" "}
+          selected at the terminal.
         </p>
       </div>
 
@@ -362,11 +401,12 @@ export default function RecommendPage() {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-                Nearby mode (phone)
+                Locate me (PWA)
               </p>
               <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-                Uses your location once per tap to match OpenStreetMap places
-                with merchants in SlyPay.
+                Combines OpenStreetMap with optional Google Places (server key)
+                for broad POI coverage. Known stores link to your SlyPay catalog;
+                others use place-type hints for category when possible.
               </p>
               {activeTier && knownVisibleMatches[0] && (
                 <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -391,9 +431,15 @@ export default function RecommendPage() {
               {geoLoading ? "Detecting…" : "Use my location"}
             </button>
           </div>
-          {geoMsg && (
+              {geoMsg && (
             <p className="mt-3 text-xs text-zinc-600 dark:text-zinc-400">
               {geoMsg}
+            </p>
+          )}
+          {placeCategoryHint && (
+            <p className="mt-2 text-xs font-medium text-emerald-800 dark:text-emerald-200">
+              Spend category from map data: {placeCategoryHint}. Editing the
+              store name clears this hint.
             </p>
           )}
           {visibleMatches.length > 0 && (
@@ -408,7 +454,8 @@ export default function RecommendPage() {
                     setOneTapBanner(null);
                   }}
                 >
-                  {n.merchant?.displayName ?? n.detectedName} ({n.distanceMeters}m)
+                  {n.merchant?.displayName ?? n.detectedName} ({n.distanceMeters}m
+                  {n.source === "google" ? " · Places" : ""})
                 </button>
               ))}
               {knownVisibleMatches.length > 0 && (
@@ -453,10 +500,12 @@ export default function RecommendPage() {
           <MerchantInput
             value={merchant}
             onChange={setMerchant}
+            onUserInput={() => setPlaceCategoryHint(null)}
             onPick={(m) => {
               if (m.mcc) setMcc(m.mcc);
               setActiveTier(null);
               setOneTapBanner(null);
+              setPlaceCategoryHint(null);
             }}
           />
         </div>
