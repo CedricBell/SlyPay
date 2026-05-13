@@ -11,6 +11,39 @@ export class ApiError extends Error {
   }
 }
 
+/** Human-readable message; avoids dumping Next.js HTML error pages into the UI. */
+export function formatApiErrorForUser(body: string, status: number): string {
+  const raw = (body ?? "").trim();
+  if (!raw) {
+    return `Erreur HTTP ${status}`;
+  }
+  if (raw.startsWith("<!") || raw.startsWith("<html")) {
+    return [
+      `Le serveur a renvoyé une page d’erreur (${status}) au lieu de JSON.`,
+      "Cause fréquente : cache `.next` corrompu ou mélange Turbopack / Webpack.",
+      "Arrête le serveur, puis `cd frontend && npm run dev:clean` (efface `.next` une fois) ou `npm run dev` si le cache est déjà sain. Un seul terminal `next dev`.",
+    ].join(" ");
+  }
+  try {
+    const j = JSON.parse(raw) as { message?: unknown };
+    if (typeof j?.message === "string" && j.message.trim()) {
+      return j.message.trim();
+    }
+  } catch {
+    /* not JSON */
+  }
+  const max = 800;
+  return raw.length > max ? `${raw.slice(0, max)}…` : raw;
+}
+
+export function formatCaughtApiError(e: unknown): string {
+  if (e instanceof ApiError) {
+    return formatApiErrorForUser(e.body || e.message, e.status);
+  }
+  if (e instanceof Error) return e.message;
+  return "Une erreur inattendue s’est produite.";
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit & { auth?: boolean } = {},

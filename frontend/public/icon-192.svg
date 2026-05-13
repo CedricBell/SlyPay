@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
-  <rect width="192" height="192" rx="40" fill="#0f172a"/>
-  <circle cx="96" cy="96" r="60" fill="#10b981" opacity="0.18"/>
-  <path d="M55 118c10 12 22 19 41 19 23 0 39-13 39-32 0-18-14-27-34-32l-10-2c-8-2-12-5-12-11 0-7 7-12 16-12 9 0 18 3 26 10l10-13c-10-9-22-14-37-14-22 0-38 13-38 31 0 17 12 27 33 31l10 2c9 2 13 5 13 12 0 8-7 13-18 13-11 0-22-4-31-13z" fill="#ecfeff"/>
-  <text x="96" y="162" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" fill="#e2e8f0">S</text>
-</svg>
-

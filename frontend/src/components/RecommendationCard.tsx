@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
 import { CardThumbnail } from "@/components/CardThumbnail";
 
 type Ranked = {
@@ -181,7 +181,7 @@ export function RecommendationCard({
       setMsg("Thanks — we logged that for review.");
       setNote("");
     } catch (e) {
-      if (e instanceof ApiError) setErr(e.body || e.message);
+      if (e instanceof ApiError) setErr(formatCaughtApiError(e));
       else setErr("Could not send report");
     } finally {
       setBusy(false);
@@ -191,17 +191,17 @@ export function RecommendationCard({
   return (
     <>
     <div className="motion-enter overflow-hidden rounded-3xl border border-zinc-200/80 bg-[var(--surface)] shadow-[0_24px_80px_-32px_rgba(0,0,0,0.35)] backdrop-blur-xl dark:border-zinc-800/80 dark:bg-zinc-950/70 dark:shadow-[0_28px_90px_-36px_rgba(0,0,0,0.65)]">
-      <div className="relative border-b border-white/10 bg-gradient-to-br from-emerald-600 via-teal-600 to-cyan-700 px-5 py-5 text-white sm:px-6 sm:py-6">
+      <div className="relative border-b border-white/10 bg-gradient-to-br from-violet-600 via-blue-600 to-indigo-700 px-5 py-5 text-white sm:px-6 sm:py-6">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(800px_200px_at_20%_-40%,rgba(255,255,255,0.35),transparent)] opacity-90" />
         <div className="relative">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-100/90">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-violet-100/90">
             Best card for this purchase
           </p>
           <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
             {bestCard ? bestCard.name : "Add a card to get recommendations"}
           </h2>
           {bestCard && (
-            <p className="mt-1 text-sm text-emerald-50/90">
+            <p className="mt-1 text-sm text-violet-50/90">
               {bestCard.issuer}
               {bestCard.last4 ? ` · ending ${bestCard.last4}` : ""}
             </p>
@@ -241,13 +241,13 @@ export function RecommendationCard({
           <ul className="mt-2 space-y-1.5 text-zinc-700 dark:text-zinc-300">
             {trace.map((t, i) => (
               <li key={`t-${i}`} className="flex gap-2">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
                 <span>{t}</span>
               </li>
             ))}
             {reasoning.map((t, i) => (
               <li key={`r-${i}`} className="flex gap-2">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-400" />
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400" />
                 <span>{t}</span>
               </li>
             ))}
@@ -255,8 +255,8 @@ export function RecommendationCard({
         </div>
 
         {marketBest && (
-          <div className="rounded-2xl border border-sky-300/50 bg-gradient-to-br from-sky-50 to-white px-4 py-4 dark:border-sky-900/60 dark:from-sky-950/50 dark:to-zinc-950/40">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-sky-800 dark:text-sky-200">
+          <div className="rounded-2xl border border-blue-300/50 bg-gradient-to-br from-blue-50 to-white px-4 py-4 dark:border-blue-900/60 dark:from-blue-950/50 dark:to-zinc-950/40">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-200">
               Global catalog comparison
             </p>
             <p className="mt-1 text-zinc-800 dark:text-zinc-100">
@@ -288,7 +288,7 @@ export function RecommendationCard({
               {ranked.map((r, idx) => (
                 <li
                   key={r.cardId}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/70 bg-white/60 px-2 py-2 pl-2 transition hover:border-emerald-300/50 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:hover:border-emerald-900/40"
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/70 bg-white/60 px-2 py-2 pl-2 transition hover:border-violet-300/50 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:hover:border-violet-900/40"
                 >
                   <span className="flex min-w-0 items-center gap-2.5">
                     <CardThumbnail
@@ -316,7 +316,7 @@ export function RecommendationCard({
         )}
 
         {bestCard && (
-          <div className="rounded-3xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50/90 to-white px-5 py-6 dark:border-emerald-900/50 dark:from-emerald-950/30 dark:to-zinc-950/40">
+          <div className="rounded-3xl border border-violet-200/70 bg-gradient-to-br from-violet-50/90 to-white px-5 py-6 dark:border-violet-900/50 dark:from-violet-950/30 dark:to-zinc-950/40">
             <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:justify-center sm:gap-8">
               <CardThumbnail
                 name={bestCard.name}
@@ -345,7 +345,7 @@ export function RecommendationCard({
               onClick={() => void payWithRecommendedCard()}
               className={`mt-6 w-full rounded-2xl bg-gradient-to-r from-[#000] to-zinc-800 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99] dark:from-zinc-800 dark:to-zinc-950 ${
                 payJustActivated
-                  ? "ring-4 ring-emerald-400/90 ring-offset-2 ring-offset-white dark:ring-offset-zinc-900"
+                  ? "ring-4 ring-violet-400/90 ring-offset-2 ring-offset-white dark:ring-offset-zinc-900"
                   : ""
               }`}
             >
@@ -370,7 +370,7 @@ export function RecommendationCard({
                 type="button"
                 disabled={busy}
                 onClick={() => void submit(o.kind)}
-                className="rounded-full border border-zinc-300/80 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 shadow-sm transition active:scale-[0.98] hover:border-emerald-400 hover:text-emerald-800 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-emerald-700 dark:hover:text-emerald-200"
+                className="rounded-full border border-zinc-300/80 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-800 shadow-sm transition active:scale-[0.98] hover:border-violet-400 hover:text-violet-800 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-violet-700 dark:hover:text-violet-200"
               >
                 {o.label}
               </button>
@@ -379,7 +379,7 @@ export function RecommendationCard({
           <label className="mt-3 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Optional note
             <textarea
-              className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-emerald-500/30 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              className="mt-1 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-900 outline-none ring-violet-500/30 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
               rows={2}
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -387,7 +387,7 @@ export function RecommendationCard({
             />
           </label>
           {msg && (
-            <p className="mt-2 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+            <p className="mt-2 text-xs font-medium text-violet-700 dark:text-violet-300">
               {msg}
             </p>
           )}
@@ -400,7 +400,7 @@ export function RecommendationCard({
 
     {payStripOpen && bestCard ? (
       <div
-        className="motion-enter fixed inset-x-0 bottom-0 z-[100] border-t border-emerald-500/25 bg-[var(--surface)]/95 px-3 py-3 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.2)] backdrop-blur-xl dark:border-emerald-900/30 dark:bg-zinc-950/95"
+        className="motion-enter fixed inset-x-0 bottom-0 z-[100] border-t border-violet-500/25 bg-[var(--surface)]/95 px-3 py-3 shadow-[0_-10px_40px_-10px_rgba(0,0,0,0.2)] backdrop-blur-xl dark:border-violet-900/30 dark:bg-zinc-950/95"
         style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
         role="status"
         aria-label="Card digits for checkout"
@@ -428,7 +428,7 @@ export function RecommendationCard({
             <button
               type="button"
               onClick={() => void payWithRecommendedCard()}
-              className="rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-emerald-500 active:scale-[0.98]"
+              className="rounded-xl bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow transition hover:bg-violet-500 active:scale-[0.98]"
             >
               Open again
             </button>

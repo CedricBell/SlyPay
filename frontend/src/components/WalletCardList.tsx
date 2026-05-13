@@ -37,8 +37,8 @@ export function WalletCardList({ cards, selectedId, onSelect }: Props) {
         onClick={() => onSelect(active ? null : c.id)}
         className={`flex flex-row items-center gap-3 rounded-2xl border px-3 py-3 text-left transition active:scale-[0.99] ${
           active
-            ? "border-emerald-500/60 bg-emerald-500/10 ring-2 ring-emerald-500/25 shadow-sm dark:border-emerald-500/40 dark:bg-emerald-500/10"
-            : "border-zinc-200/80 bg-white/50 hover:border-emerald-300/50 dark:border-zinc-800 dark:bg-zinc-950/40 dark:hover:border-emerald-900/40"
+            ? "border-violet-500/60 bg-violet-500/10 ring-2 ring-violet-500/25 shadow-sm dark:border-violet-500/40 dark:bg-violet-500/10"
+            : "border-zinc-200/80 bg-white/50 hover:border-violet-300/50 dark:border-zinc-800 dark:bg-zinc-950/40 dark:hover:border-violet-900/40"
         }`}
           >
             <CardThumbnail

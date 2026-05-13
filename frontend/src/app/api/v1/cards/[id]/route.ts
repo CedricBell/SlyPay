@@ -5,7 +5,18 @@ import { getSessionAppUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
 import { mapCreditCardJson } from "@/lib/map-credit-card";
 
-const cardInclude = { rewardRules: true, offers: true } as const;
+const cardInclude = {
+  rewardRules: true,
+  offers: true,
+  catalogProduct: {
+    select: {
+      slug: true,
+      lastExtractJson: true,
+      lastExtractHash: true,
+      officialDocumentUrl: true,
+    },
+  },
+} as const;
 
 const ruleInput = z.object({
   category: z.nativeEnum(SpendCategory),

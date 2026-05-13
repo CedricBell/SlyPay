@@ -1,13 +1,17 @@
 @import "tailwindcss";
 
+/* Palette alignée sur le logo SlyPay : dégradé violet → bleu, accent « check » vert/teal */
 :root {
-  --background: #f4f4f5;
-  --foreground: #0c0c0d;
-  --accent: #059669;
-  --accent-2: #0d9488;
-  --surface: rgba(255, 255, 255, 0.78);
-  --surface-elevated: rgba(255, 255, 255, 0.92);
-  --ring: rgba(16, 185, 129, 0.4);
+  --background: #f4f4f7;
+  --foreground: #0c0c12;
+  --accent: #6d28d9;
+  --accent-2: #2563eb;
+  --accent-soft: #8b5cf6;
+  --success: #0d9488;
+  --success-bright: #65a30d;
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-elevated: rgba(255, 255, 255, 0.94);
+  --ring: rgba(109, 40, 217, 0.45);
 }
 
 @theme inline {
@@ -19,11 +23,16 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #09090b;
+    --background: #09090f;
     --foreground: #fafafa;
-    --surface: rgba(24, 24, 27, 0.75);
-    --surface-elevated: rgba(24, 24, 27, 0.92);
-    --ring: rgba(52, 211, 153, 0.35);
+    --accent: #8b5cf6;
+    --accent-2: #3b82f6;
+    --accent-soft: #a78bfa;
+    --success: #14b8a6;
+    --success-bright: #84cc16;
+    --surface: rgba(24, 24, 32, 0.78);
+    --surface-elevated: rgba(30, 30, 40, 0.92);
+    --ring: rgba(167, 139, 250, 0.45);
   }
 }
 
@@ -71,24 +80,24 @@ body {
 .page-sheen {
   background-image:
     radial-gradient(
-      1000px 520px at 12% -8%,
-      color-mix(in srgb, var(--accent) 16%, transparent),
-      transparent 55%
+      900px 480px at 10% -6%,
+      color-mix(in srgb, var(--accent) 18%, transparent),
+      transparent 58%
     ),
     radial-gradient(
-      720px 420px at 96% 4%,
-      color-mix(in srgb, var(--accent-2) 12%, transparent),
-      transparent 50%
+      700px 400px at 92% 6%,
+      color-mix(in srgb, var(--accent-2) 14%, transparent),
+      transparent 52%
     ),
     radial-gradient(
-      600px 360px at 50% 100%,
-      color-mix(in srgb, var(--accent) 8%, transparent),
-      transparent 55%
+      560px 320px at 48% 102%,
+      color-mix(in srgb, var(--accent-soft) 10%, transparent),
+      transparent 58%
     );
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
 :focus-visible {

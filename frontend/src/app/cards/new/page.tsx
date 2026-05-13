@@ -7,7 +7,7 @@ import {
   type CatalogTemplate,
 } from "@/components/CardCatalogSuggest";
 import { CardThumbnail } from "@/components/CardThumbnail";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
 
 const CATEGORIES = [
   "GROCERIES",
@@ -41,6 +41,10 @@ export default function NewCardPage() {
   ]);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /** Set when applying catalog autocomplete — triggers PDF intelligence on save. */
+  const [catalogSlug, setCatalogSlug] = useState<string | null>(null);
+  /** Typed-name / non-catalog product — same PDF pipeline via `adhoc-*` catalog row. */
+  const [intelAdHocFromName, setIntelAdHocFromName] = useState(false);
 
   const addRule = () => {
     setRules((r) => [
@@ -61,6 +65,8 @@ export default function NewCardPage() {
           issuer,
           last4: last4 || undefined,
           colorHex,
+          catalogSlug: catalogSlug ?? undefined,
+          intelAdHocFromName: intelAdHocFromName || undefined,
           rules: rules.map((x) => ({
             category: x.category,
             multiplier: Number(x.multiplier),
@@ -70,7 +76,7 @@ export default function NewCardPage() {
       });
       router.push("/cards");
     } catch (e) {
-      if (e instanceof ApiError) setErr(e.body);
+      if (e instanceof ApiError) setErr(formatCaughtApiError(e));
       else setErr("Failed to create");
     } finally {
       setLoading(false);
@@ -78,15 +84,24 @@ export default function NewCardPage() {
   };
 
   const applyCatalog = (t: CatalogTemplate) => {
+    if (t.intelAdHocFromName) {
+      setIntelAdHocFromName(true);
+      setCatalogSlug(null);
+    } else {
+      setIntelAdHocFromName(false);
+      setCatalogSlug(t.id);
+    }
     setName(t.name);
     setIssuer(t.issuer);
     if (t.colorHex) setColorHex(t.colorHex);
     setRules(
-      t.rules.map((r) => ({
-        category: r.category as RuleRow["category"],
-        multiplier: String(r.multiplier),
-        earningType: r.earningType as RuleRow["earningType"],
-      })),
+      t.rules.length
+        ? t.rules.map((r) => ({
+            category: r.category as RuleRow["category"],
+            multiplier: String(r.multiplier),
+            earningType: r.earningType as RuleRow["earningType"],
+          }))
+        : [{ category: "OTHER", multiplier: "1", earningType: "POINTS" }],
     );
   };
 
@@ -104,6 +119,16 @@ export default function NewCardPage() {
       </div>
       <form onSubmit={submit} className="space-y-4">
         <CardCatalogSuggest onApply={applyCatalog} />
+        {catalogSlug === null && !intelAdHocFromName && (
+          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
+            Aucune entrée catalogue sélectionnée : la pipeline (recherche PDF →
+            extraction → règles) ne sera{" "}
+            <span className="font-semibold">pas</span> lancée. Choisis une ligne
+            dans « Quick fill from catalog » (y compris la ligne{" "}
+            <span className="font-semibold">Web</span> construite à partir de ta
+            saisie) avant d’enregistrer, ou complète les règles à la main.
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-sm font-medium">Name</label>
@@ -151,7 +176,7 @@ export default function NewCardPage() {
             <button
               type="button"
               onClick={addRule}
-              className="text-sm font-medium text-emerald-600"
+              className="text-sm font-medium text-violet-600"
             >
               + Add rule
             </button>
@@ -213,15 +238,15 @@ export default function NewCardPage() {
         </div>
 
         {err && (
-          <pre className="overflow-x-auto rounded bg-red-50 p-2 text-xs text-red-800 dark:bg-red-950/40 dark:text-red-200">
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100">
             {err}
-          </pre>
+          </div>
         )}
 
         <button
           type="submit"
           disabled={loading}
-          className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
         >
           {loading ? "Saving…" : "Save card"}
         </button>

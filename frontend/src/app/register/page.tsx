@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -45,8 +46,18 @@ export default function RegisterPage() {
 
   return (
     <div className="motion-enter mx-auto max-w-md space-y-8 py-8 md:py-12">
+      <div className="flex justify-center sm:justify-start">
+        <Image
+          src="/assets/logoavecSlyPay.png"
+          alt="SlyPay"
+          width={260}
+          height={110}
+          className="h-auto max-h-24 w-auto max-w-full object-contain"
+          priority
+        />
+      </div>
       <div className="space-y-2 text-center sm:text-left">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-400">
           Join SlyPay
         </p>
         <h1 className="text-3xl font-semibold tracking-tight">Create account</h1>
@@ -63,7 +74,7 @@ export default function RegisterPage() {
             Email
           </label>
           <input
-            className="w-full rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 text-zinc-900 outline-none ring-emerald-500/30 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+            className="w-full rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 text-zinc-900 outline-none ring-violet-500/30 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -75,7 +86,7 @@ export default function RegisterPage() {
             Password
           </label>
           <input
-            className="w-full rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 text-zinc-900 outline-none ring-emerald-500/30 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+            className="w-full rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 text-zinc-900 outline-none ring-violet-500/30 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -92,7 +103,7 @@ export default function RegisterPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3 text-sm font-semibold text-white shadow-md transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
+          className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-blue-600 py-3 text-sm font-semibold text-white shadow-md transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60"
         >
           {loading ? "Creating…" : "Register"}
         </button>
@@ -101,7 +112,7 @@ export default function RegisterPage() {
         Already have an account?{" "}
         <Link
           href="/login"
-          className="font-semibold text-emerald-600 hover:underline dark:text-emerald-400"
+          className="font-semibold text-violet-600 hover:underline dark:text-violet-400"
         >
           Sign in
         </Link>

@@ -49,7 +49,7 @@ export default function DashboardPage() {
   return (
     <div className="motion-enter space-y-10">
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-400">
           Overview
         </p>
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Home</h1>
@@ -69,17 +69,17 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-3xl border border-zinc-200/70 bg-[var(--surface)] p-5 shadow-md backdrop-blur-xl transition hover:border-emerald-300/40 dark:border-zinc-800/80 dark:hover:border-emerald-800/30">
+        <div className="rounded-3xl border border-zinc-200/70 bg-[var(--surface)] p-5 shadow-md backdrop-blur-xl transition hover:border-violet-300/40 dark:border-zinc-800/80 dark:hover:border-violet-800/30">
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Cards configured</p>
           <p className="mt-2 text-3xl font-semibold tabular-nums">{cards}</p>
           <Link
             href="/cards"
-            className="mt-4 inline-flex text-sm font-semibold text-emerald-600 hover:underline dark:text-emerald-400"
+            className="mt-4 inline-flex text-sm font-semibold text-violet-600 hover:underline dark:text-violet-400"
           >
             Manage cards →
           </Link>
         </div>
-        <div className="rounded-3xl border border-zinc-200/70 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent p-5 shadow-md backdrop-blur-xl dark:border-zinc-800/80">
+        <div className="rounded-3xl border border-zinc-200/70 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-transparent p-5 shadow-md backdrop-blur-xl dark:border-zinc-800/80">
           <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Fast recommendation</p>
           <p className="mt-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
             In-store nearby mode
@@ -89,7 +89,7 @@ export default function DashboardPage() {
           </p>
           <Link
             href="/recommend"
-            className="mt-4 inline-flex text-sm font-semibold text-emerald-600 hover:underline dark:text-emerald-400"
+            className="mt-4 inline-flex text-sm font-semibold text-violet-600 hover:underline dark:text-violet-400"
           >
             Open now →
           </Link>
@@ -106,7 +106,7 @@ export default function DashboardPage() {
           <h2 className="text-lg font-semibold">Last recommendations</h2>
           <Link
             href="/recommend"
-            className="text-sm font-semibold text-emerald-600 hover:underline dark:text-emerald-400"
+            className="text-sm font-semibold text-violet-600 hover:underline dark:text-violet-400"
           >
             New recommendation
           </Link>
@@ -138,7 +138,7 @@ export default function DashboardPage() {
       <div className="flex flex-wrap gap-3">
         <Link
           href="/recommend"
-          className="rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99]"
+          className="rounded-2xl bg-gradient-to-r from-violet-600 to-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99]"
         >
           Recommend now
         </Link>

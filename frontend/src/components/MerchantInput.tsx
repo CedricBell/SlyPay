@@ -56,7 +56,7 @@ export function MerchantInput({
         Where are you shopping?
       </label>
       <input
-        className="w-full rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 text-zinc-900 shadow-inner outline-none ring-emerald-500/35 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+        className="w-full rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 text-zinc-900 shadow-inner outline-none ring-violet-500/35 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
         placeholder="e.g. Whole Foods, Starbucks…"
         value={value}
         onFocus={() => setOpen(true)}
@@ -76,7 +76,7 @@ export function MerchantInput({
             <li key={m.id}>
               <button
                 type="button"
-                className="flex w-full flex-col items-start px-4 py-2.5 text-left transition first:rounded-t-2xl last:rounded-b-2xl hover:bg-emerald-500/10 dark:hover:bg-emerald-500/10"
+                className="flex w-full flex-col items-start px-4 py-2.5 text-left transition first:rounded-t-2xl last:rounded-b-2xl hover:bg-violet-500/10 dark:hover:bg-violet-500/10"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => {
                   onChange(m.displayName);

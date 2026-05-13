@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
 
 type Stats = {
   periodDays: number;
@@ -53,7 +53,7 @@ export function DashboardSpendPanel() {
       setStats(data);
     } catch (e) {
       if (e instanceof ApiError) {
-        setErr(e.body || e.message);
+        setErr(formatCaughtApiError(e));
       } else {
         setErr("Could not load statistics");
       }
@@ -108,7 +108,7 @@ export function DashboardSpendPanel() {
               onClick={() => setDays(d)}
               className={`rounded-md px-2.5 py-1 font-medium ${
                 days === d
-                  ? "bg-emerald-600 text-white"
+                  ? "bg-violet-600 text-white"
                   : "border border-zinc-200 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
               }`}
             >
@@ -193,7 +193,7 @@ export function DashboardSpendPanel() {
               <div className="mt-4 flex flex-wrap justify-center gap-3">
                 <Link
                   href="/recommend"
-                  className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700"
                 >
                   Run a recommendation
                 </Link>
@@ -235,7 +235,7 @@ export function DashboardSpendPanel() {
                         </div>
                         <div className="mt-1 h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                           <div
-                            className="h-full rounded-full bg-emerald-500"
+                            className="h-full rounded-full bg-violet-500"
                             style={{
                               width: `${maxCat ? Math.round((row.amount / maxCat) * 100) : 0}%`,
                             }}
@@ -300,7 +300,7 @@ export function DashboardSpendPanel() {
                           title={`${d.date}: ${fmtDetail.format(d.amount)}`}
                         >
                           <div
-                            className="w-full max-w-[12px] rounded-t bg-emerald-500/90 transition group-hover:bg-emerald-400"
+                            className="w-full max-w-[12px] rounded-t bg-violet-500/90 transition group-hover:bg-violet-400"
                             style={{ height: `${barPx}px` }}
                           />
                           <span className="mt-1 hidden truncate text-[10px] text-zinc-400 sm:block">
@@ -359,7 +359,7 @@ export function DashboardSpendPanel() {
                         </div>
                         <div className="mt-1 h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                           <div
-                            className="h-full rounded-full bg-sky-500"
+                            className="h-full rounded-full bg-blue-500"
                             style={{
                               width: `${maxRec ? Math.round((row.count / maxRec) * 100) : 0}%`,
                             }}
@@ -382,7 +382,7 @@ export function DashboardSpendPanel() {
                   </li>
                   <li>
                     Keep card rules up to date on{" "}
-                    <Link href="/cards" className="font-medium text-emerald-600">
+                    <Link href="/cards" className="font-medium text-violet-600">
                       Cards
                     </Link>{" "}
                     so recommendations match your real wallet.
@@ -391,7 +391,7 @@ export function DashboardSpendPanel() {
                     Run{" "}
                     <Link
                       href="/recommend"
-                      className="font-medium text-emerald-600"
+                      className="font-medium text-violet-600"
                     >
                       Recommendations
                     </Link>{" "}

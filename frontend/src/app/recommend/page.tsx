@@ -6,7 +6,7 @@ import type { SpendCategory } from "@prisma/client";
 import { MerchantInput } from "@/components/MerchantInput";
 import { RecommendationCard } from "@/components/RecommendationCard";
 import { WalletCardList } from "@/components/WalletCardList";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
 
 const LS_AMOUNT = "slypay_last_recommend_amount";
 
@@ -84,7 +84,7 @@ function confidenceTier(m: NearbyMatch): ConfidenceTier {
 function tierBadgeClass(t: ConfidenceTier) {
   switch (t) {
     case "high":
-      return "border-emerald-400/60 bg-emerald-500/15 text-emerald-900 dark:text-emerald-100";
+      return "border-violet-400/60 bg-violet-500/15 text-violet-900 dark:text-violet-100";
     case "medium":
       return "border-amber-400/50 bg-amber-500/15 text-amber-950 dark:text-amber-100";
     default:
@@ -203,7 +203,7 @@ export default function RecommendPage() {
         }
       } catch (e) {
         if (e instanceof ApiError) {
-          setErr(e.body || e.message);
+          setErr(formatCaughtApiError(e));
         } else setErr("Request failed");
       } finally {
         setLoading(false);
@@ -369,7 +369,7 @@ export default function RecommendPage() {
   return (
     <div className="motion-enter space-y-8">
       <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-400">
           In-store assistant
         </p>
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
@@ -388,7 +388,7 @@ export default function RecommendPage() {
       </div>
 
       {oneTapBanner && (
-        <div className="rounded-2xl border border-emerald-300/50 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 px-4 py-3 text-sm font-medium text-emerald-950 shadow-sm dark:border-emerald-800/40 dark:from-emerald-950/30 dark:via-teal-950/20 dark:to-cyan-950/20 dark:text-emerald-50">
+        <div className="rounded-2xl border border-violet-300/50 bg-gradient-to-r from-violet-500/10 via-blue-500/10 to-indigo-500/10 px-4 py-3 text-sm font-medium text-violet-950 shadow-sm dark:border-violet-800/40 dark:from-violet-950/30 dark:via-blue-950/20 dark:to-indigo-950/20 dark:text-violet-50">
           {oneTapBanner}
         </div>
       )}
@@ -400,7 +400,7 @@ export default function RecommendPage() {
         }}
         className="space-y-6"
       >
-        <div className="rounded-3xl border border-sky-200/60 bg-gradient-to-br from-sky-50/90 to-white/80 p-4 shadow-sm backdrop-blur-md dark:border-sky-900/50 dark:from-sky-950/40 dark:to-zinc-950/40 sm:p-5">
+        <div className="rounded-3xl border border-blue-200/60 bg-gradient-to-br from-blue-50/90 to-white/80 p-4 shadow-sm backdrop-blur-md dark:border-blue-900/50 dark:from-blue-950/40 dark:to-zinc-950/40 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
@@ -429,7 +429,7 @@ export default function RecommendPage() {
               type="button"
               onClick={() => void detectNearby()}
               disabled={geoLoading}
-              className="shrink-0 rounded-2xl bg-gradient-to-r from-sky-600 to-cyan-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
+              className="shrink-0 rounded-2xl bg-gradient-to-r from-violet-600 to-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md transition hover:brightness-110 active:scale-[0.98] disabled:opacity-60"
             >
               {geoLoading ? "Detecting…" : "Use my location"}
             </button>
@@ -440,7 +440,7 @@ export default function RecommendPage() {
             </p>
           )}
           {placeCategoryHint && (
-            <p className="mt-2 text-xs font-medium text-emerald-800 dark:text-emerald-200">
+            <p className="mt-2 text-xs font-medium text-violet-800 dark:text-violet-200">
               Spend category from map data: {placeCategoryHint}. Editing the
               store name clears this hint.
             </p>
@@ -451,7 +451,7 @@ export default function RecommendPage() {
                 <button
                   key={`${n.merchant?.id ?? n.detectedName}-${n.distanceMeters}`}
                   type="button"
-                  className="rounded-full border border-sky-300/60 bg-white/80 px-3 py-1.5 text-xs font-semibold text-sky-900 shadow-sm transition hover:bg-sky-50 active:scale-[0.98] dark:border-sky-800 dark:bg-zinc-950/60 dark:text-sky-100 dark:hover:bg-sky-950/50"
+                  className="rounded-full border border-blue-300/60 bg-white/80 px-3 py-1.5 text-xs font-semibold text-blue-900 shadow-sm transition hover:bg-blue-50 active:scale-[0.98] dark:border-blue-800 dark:bg-zinc-950/60 dark:text-blue-100 dark:hover:bg-blue-950/50"
                   onClick={() => {
                     applyMatch(n);
                     setOneTapBanner(null);
@@ -519,7 +519,7 @@ export default function RecommendPage() {
               Amount (USD)
             </label>
             <input
-              className="w-full rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 text-zinc-900 shadow-inner outline-none ring-emerald-500/30 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              className="w-full rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 text-zinc-900 shadow-inner outline-none ring-violet-500/30 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
               type="number"
               step="0.01"
               min="0.01"
@@ -533,7 +533,7 @@ export default function RecommendPage() {
               MCC override (optional)
             </label>
             <input
-              className="w-full rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 text-zinc-900 outline-none ring-emerald-500/30 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+              className="w-full rounded-2xl border border-zinc-200/80 bg-white/90 px-4 py-3 text-zinc-900 outline-none ring-violet-500/30 focus:ring-2 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
               placeholder="e.g. 5411"
               value={mcc}
               onChange={(e) => setMcc(e.target.value)}
@@ -565,7 +565,7 @@ export default function RecommendPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60 sm:w-auto sm:px-10"
+          className="w-full rounded-2xl bg-gradient-to-r from-violet-600 via-blue-600 to-indigo-600 py-3.5 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99] disabled:opacity-60 sm:w-auto sm:px-10"
         >
           {loading ? "Computing…" : "Get recommendation"}
         </button>

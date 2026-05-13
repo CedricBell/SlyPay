@@ -7,7 +7,7 @@ import {
   type CatalogTemplate,
 } from "@/components/CardCatalogSuggest";
 import { CardThumbnail } from "@/components/CardThumbnail";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
 
 const CATEGORIES = [
   "GROCERIES",
@@ -30,6 +30,18 @@ type RuleRow = {
   earningType: (typeof EARN)[number];
 };
 
+type WalletPreview = {
+  ruleHighlights: string[];
+  pdfSummary: string | null;
+  statementCreditHints: string[];
+  scoreBreakdown?: {
+    statementCredits: number;
+    earnStructure: number;
+    rewardRules: number;
+    annualFeePenalty?: number;
+  };
+};
+
 type CardDetail = {
   id: string;
   name: string;
@@ -42,6 +54,12 @@ type CardDetail = {
     multiplier: number;
     earningType: string;
   }>;
+  catalogLinked?: boolean;
+  catalogSlug?: string | null;
+  hasOfficialPdfExtract?: boolean;
+  officialDocumentUrl?: string | null;
+  walletPreview?: WalletPreview;
+  walletScore?: number;
 };
 
 export default function EditCardPage() {
@@ -53,6 +71,13 @@ export default function EditCardPage() {
   const [colorHex, setColorHex] = useState("#0f172a");
   const [isActive, setIsActive] = useState(true);
   const [rules, setRules] = useState<RuleRow[]>([]);
+  const [intel, setIntel] = useState<{
+    catalogSlug: string | null;
+    officialDocumentUrl: string | null;
+    hasOfficialPdfExtract: boolean;
+    walletPreview: WalletPreview | undefined;
+    walletScore: number | undefined;
+  } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [init, setInit] = useState(false);
@@ -73,6 +98,13 @@ export default function EditCardPage() {
             earningType: r.earningType as RuleRow["earningType"],
           })),
         );
+        setIntel({
+          catalogSlug: c.catalogSlug ?? null,
+          officialDocumentUrl: c.officialDocumentUrl ?? null,
+          hasOfficialPdfExtract: Boolean(c.hasOfficialPdfExtract),
+          walletPreview: c.walletPreview,
+          walletScore: c.walletScore,
+        });
         setInit(true);
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) router.replace("/login");
@@ -123,7 +155,7 @@ export default function EditCardPage() {
       });
       router.push("/cards");
     } catch (e) {
-      if (e instanceof ApiError) setErr(e.body);
+      if (e instanceof ApiError) setErr(formatCaughtApiError(e));
       else setErr("Failed to save");
     } finally {
       setLoading(false);
@@ -213,13 +245,94 @@ export default function EditCardPage() {
           Active (inactive cards are ignored by the engine)
         </label>
 
+        {intel &&
+          (intel.catalogSlug ||
+            intel.officialDocumentUrl ||
+            intel.hasOfficialPdfExtract) && (
+            <div className="space-y-3 rounded-xl border border-violet-200/80 bg-violet-50/50 p-4 text-sm dark:border-violet-900/50 dark:bg-violet-950/20">
+              <p className="font-semibold text-violet-900 dark:text-violet-200">
+                Catalog &amp; PDF intelligence
+              </p>
+              <p className="text-zinc-600 dark:text-zinc-400">
+                <strong>Admin</strong> only lists items when a{" "}
+                <em>new</em> PDF changes the stored extract hash. On the{" "}
+                <em>first</em> successful run, rules below are applied
+                automatically — nothing to approve there.
+              </p>
+              {intel.catalogSlug && (
+                <p className="text-xs text-zinc-600 dark:text-zinc-400">
+                  Catalog slug:{" "}
+                  <code className="rounded bg-white px-1 py-0.5 font-mono dark:bg-zinc-900">
+                    {intel.catalogSlug}
+                  </code>
+                  {intel.walletScore != null && (
+                    <span className="ml-2">
+                      · Wallet score:{" "}
+                      <strong>{Math.round(intel.walletScore)}</strong>
+                      {intel.walletPreview?.scoreBreakdown && (
+                        <span className="text-zinc-500">
+                          {" "}
+                          (credits {intel.walletPreview.scoreBreakdown.statementCredits}
+                          , earn {intel.walletPreview.scoreBreakdown.earnStructure}, rules{" "}
+                          {intel.walletPreview.scoreBreakdown.rewardRules}
+                          {intel.walletPreview.scoreBreakdown.annualFeePenalty
+                            ? `, annual fee ${intel.walletPreview.scoreBreakdown.annualFeePenalty}`
+                            : ""}
+                          )
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </p>
+              )}
+              {intel.officialDocumentUrl ? (
+                <a
+                  href={intel.officialDocumentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex font-medium text-violet-700 underline dark:text-violet-400"
+                >
+                  Open official PDF (new tab)
+                </a>
+              ) : (
+                <p className="text-xs text-amber-800 dark:text-amber-200/90">
+                  No PDF URL on the catalog row yet (discovery may still be
+                  running or failed).
+                </p>
+              )}
+              {intel.walletPreview?.pdfSummary && (
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                    Extract summary
+                  </p>
+                  <p className="mt-1 text-zinc-800 dark:text-zinc-200">
+                    {intel.walletPreview.pdfSummary}
+                  </p>
+                </div>
+              )}
+              {intel.walletPreview &&
+                intel.walletPreview.statementCreditHints.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                      Statement credits (from PDF)
+                    </p>
+                    <ul className="mt-1 list-inside list-disc text-zinc-700 dark:text-zinc-300">
+                      {intel.walletPreview.statementCreditHints.map((t, idx) => (
+                        <li key={`${idx}-${t.slice(0, 48)}`}>{t}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+            </div>
+          )}
+
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium">Reward rules</p>
             <button
               type="button"
               onClick={addRule}
-              className="text-sm font-medium text-emerald-600"
+              className="text-sm font-medium text-violet-600"
             >
               + Add rule
             </button>
@@ -290,7 +403,7 @@ export default function EditCardPage() {
           <button
             type="submit"
             disabled={loading}
-            className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+            className="rounded-lg bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-60"
           >
             {loading ? "Saving…" : "Save changes"}
           </button>

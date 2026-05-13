@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
@@ -59,7 +60,7 @@ export function NavBar() {
         : "border-transparent text-amber-900/90 hover:border-amber-400/30 hover:bg-amber-500/10 dark:text-amber-200/90";
     }
     return active
-      ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-950 shadow-sm dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-50"
+      ? "border-violet-500/40 bg-violet-500/15 text-violet-950 shadow-sm dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-50"
       : "border-transparent text-zinc-600 hover:border-zinc-300/60 hover:bg-white/60 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:bg-zinc-900/60";
   };
 
@@ -69,12 +70,21 @@ export function NavBar() {
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
           <Link
             href={authed ? "/dashboard" : "/"}
-            className="group flex items-center gap-2 font-semibold tracking-tight"
+            aria-label="SlyPay home"
+            className="group flex items-center gap-2.5"
           >
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-sm font-bold text-white shadow-md transition group-hover:scale-[1.03] group-active:scale-[0.98]">
-              S
+            <Image
+              src="/assets/logoSeul.png"
+              alt=""
+              width={36}
+              height={36}
+              aria-hidden
+              className="h-9 w-9 shrink-0 rounded-xl bg-white object-contain p-0.5 shadow-md ring-1 ring-zinc-200/80 transition group-hover:scale-[1.03] group-active:scale-[0.98] dark:bg-zinc-900 dark:ring-zinc-700/80"
+              priority
+            />
+            <span className="bg-gradient-to-r from-violet-700 via-blue-600 to-violet-700 bg-clip-text text-lg font-semibold tracking-tight text-transparent dark:from-violet-300 dark:via-blue-300 dark:to-violet-300 sm:text-xl">
+              SlyPay
             </span>
-            <span className="hidden sm:inline">SlyPay</span>
           </Link>
           {!isAuthPage && (
             <nav className="hidden flex-1 items-center justify-end gap-1 md:flex">
@@ -107,7 +117,7 @@ export function NavBar() {
               ) : (
                 <Link
                   href="/login"
-                  className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-110 active:scale-[0.98]"
+                  className="rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-110 active:scale-[0.98]"
                 >
                   Sign in
                 </Link>
@@ -117,7 +127,7 @@ export function NavBar() {
           {!isAuthPage && !authed && (
             <Link
               href="/login"
-              className="rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-110 active:scale-[0.98] md:hidden"
+              className="rounded-xl bg-gradient-to-r from-violet-600 to-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition hover:brightness-110 active:scale-[0.98] md:hidden"
             >
               Sign in
             </Link>

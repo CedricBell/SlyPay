@@ -4,7 +4,7 @@ export default function HomePage() {
   return (
     <div className="motion-enter space-y-14 py-6 md:py-10">
       <section className="space-y-6 text-center sm:text-left">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-600 dark:text-emerald-400">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-violet-600 dark:text-violet-400">
           SlyPay · In-store & online
         </p>
         <h1 className="text-4xl font-semibold tracking-tight sm:text-5xl md:text-6xl">
@@ -18,13 +18,13 @@ export default function HomePage() {
         <div className="flex flex-wrap justify-center gap-3 sm:justify-start">
           <Link
             href="/register"
-            className="rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99]"
+            className="rounded-2xl bg-gradient-to-r from-violet-600 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99]"
           >
             Create account
           </Link>
           <Link
             href="/login"
-            className="rounded-2xl border border-zinc-300/80 bg-[var(--surface)] px-6 py-3 text-sm font-semibold text-zinc-900 shadow-sm backdrop-blur-xl transition hover:border-emerald-400/40 dark:border-zinc-700 dark:text-zinc-50 dark:hover:border-emerald-800/40"
+            className="rounded-2xl border border-zinc-300/80 bg-[var(--surface)] px-6 py-3 text-sm font-semibold text-zinc-900 shadow-sm backdrop-blur-xl transition hover:border-violet-400/40 dark:border-zinc-700 dark:text-zinc-50 dark:hover:border-violet-800/40"
           >
             Sign in
           </Link>

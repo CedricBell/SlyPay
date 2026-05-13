@@ -10,19 +10,21 @@ export default function manifest(): MetadataRoute.Manifest {
     scope: "/",
     display: "standalone",
     orientation: "portrait",
-    background_color: "#09090b",
-    theme_color: "#10b981",
+    background_color: "#09090f",
+    theme_color: "#6d28d9",
     categories: ["finance", "productivity"],
     icons: [
       {
-        src: "/icon-192.svg",
-        type: "image/svg+xml",
+        src: "/assets/logoSeul.png",
+        type: "image/png",
         sizes: "192x192",
+        purpose: "any",
       },
       {
-        src: "/icon-512.svg",
-        type: "image/svg+xml",
+        src: "/assets/logoSeul.png",
+        type: "image/png",
         sizes: "512x512",
+        purpose: "any",
       },
     ],
   };

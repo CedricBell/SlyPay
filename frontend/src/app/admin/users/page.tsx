@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { apiFetch, ApiError } from "@/lib/api";
+import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
 
 type Row = {
   id: string;
@@ -39,7 +39,7 @@ export default function AdminUsersPage() {
       setData(res);
     } catch (e) {
       if (e instanceof ApiError) {
-        setErr(e.body || e.message);
+        setErr(formatCaughtApiError(e));
       } else setErr("Erreur de chargement");
     }
   }, [page]);
@@ -58,7 +58,7 @@ export default function AdminUsersPage() {
       });
       await load();
     } catch (e) {
-      if (e instanceof ApiError) setErr(e.body || e.message);
+      if (e instanceof ApiError) setErr(formatCaughtApiError(e));
       else setErr("Échec de la mise à jour");
     } finally {
       setBusy(null);
@@ -99,7 +99,7 @@ export default function AdminUsersPage() {
                 <td className="px-3 py-2">{u.role}</td>
                 <td className="px-3 py-2">
                   {u.isActive ? (
-                    <span className="text-emerald-600">oui</span>
+                    <span className="text-violet-600">oui</span>
                   ) : (
                     <span className="text-red-600">non</span>
                   )}
@@ -123,7 +123,7 @@ export default function AdminUsersPage() {
                       <button
                         type="button"
                         disabled={busy === u.id}
-                        className="rounded bg-emerald-600 px-2 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-50"
+                        className="rounded bg-violet-600 px-2 py-1 text-xs text-white hover:bg-violet-700 disabled:opacity-50"
                         onClick={() => patch(u.id, { isActive: true })}
                       >
                         Réactiver

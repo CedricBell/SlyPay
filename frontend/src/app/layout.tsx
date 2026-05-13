@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { NavBar } from "@/components/NavBar";
@@ -14,12 +14,19 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  themeColor: "#6d28d9",
+};
+
 export const metadata: Metadata = {
   title: "SlyPay — Real-time card recommendations",
   description:
     "Transaction-level credit card recommendations from official-style rules, offers, and merchant context.",
   manifest: "/manifest.webmanifest",
-  themeColor: "#10b981",
+  icons: {
+    icon: [{ url: "/icon.png", type: "image/png" }],
+    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
+  },
   appleWebApp: {
     capable: true,
     title: "SlyPay",
