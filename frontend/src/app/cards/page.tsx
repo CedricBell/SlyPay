@@ -7,10 +7,12 @@ import { CardThumbnail } from "@/components/CardThumbnail";
 import { apiFetch, ApiError } from "@/lib/api";
 
 type WalletScoreBreakdown = {
-  statementCredits: number;
-  earnStructure: number;
-  rewardRules: number;
-  annualFeePenalty: number;
+  grossRewardsUsd: number;
+  statementCreditsUsd: number;
+  annualFeeUsd: number;
+  netValueUsd: number;
+  scoreOutOf100: number;
+  spendProfileLabel: string;
 };
 
 type WalletPreview = {
@@ -32,6 +34,7 @@ type CardRow = {
   hasOfficialPdfExtract: boolean;
   officialDocumentUrl: string | null;
   walletScore: number;
+  walletScoreAnalyzing?: boolean;
   walletPreview: WalletPreview;
 };
 
@@ -56,7 +59,13 @@ export default function CardsPage() {
   }, [router]);
 
   const ranked = useMemo(
-    () => [...cards].sort((a, b) => b.walletScore - a.walletScore),
+    () =>
+      [...cards].sort((a, b) => {
+        if (a.walletScoreAnalyzing !== b.walletScoreAnalyzing) {
+          return a.walletScoreAnalyzing ? 1 : -1;
+        }
+        return b.walletScore - a.walletScore;
+      }),
     [cards],
   );
 
@@ -67,17 +76,14 @@ export default function CardsPage() {
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-400">
             Wallet
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Your cards</h1>
+          <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">My cards</h1>
           <p className="max-w-xl text-sm text-zinc-600 dark:text-zinc-400">
-            Classement indicatif d’après tes{" "}
+            Score sur 100 : simulation de{" "}
             <strong className="font-medium text-zinc-800 dark:text-zinc-200">
-              RewardRule
+              1&nbsp;000&nbsp;$
             </strong>{" "}
-            et, si la carte est liée au catalogue, un aperçu issu du{" "}
-            <strong className="font-medium text-zinc-800 dark:text-zinc-200">
-              dernier extrait PDF
-            </strong>{" "}
-            validé côté admin (crédits / résumé). Ce n’est pas un conseil financier.
+            de dépenses mensuelles (mix inspiré du BLS), rewards + crédits, moins la
+            cotisation annuelle au prorata. Ce n’est pas un conseil financier.
           </p>
         </div>
         <Link
@@ -95,13 +101,8 @@ export default function CardsPage() {
             Aperçu classement
           </h2>
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-500">
-            Score interne (earn hors « OTHER » + bonus si extrait PDF présent + nombre de
-            crédits mentionnés dans l’extrait). Pour des règles exactes à jour : valider une
-            proposition dans{" "}
-            <Link href="/admin/card-catalog" className="text-violet-700 underline dark:text-violet-400">
-              Admin → Catalogue
-            </Link>
-            .
+            {ranked[0]?.walletPreview.scoreBreakdown.spendProfileLabel ||
+              "Profil foyer type · 1 000 $/mois"}
           </p>
           <ol className="mt-4 grid gap-3 sm:grid-cols-2">
             {ranked.map((c, i) => (
@@ -116,18 +117,21 @@ export default function CardsPage() {
                   <p className="font-medium text-zinc-900 dark:text-zinc-100">{c.name}</p>
                   <p className="text-xs text-zinc-500">{c.issuer}</p>
                   <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-                    {c.walletPreview.ruleHighlights[0] ?? "—"} · score{" "}
-                    <strong>{c.walletScore}</strong>
-                      <span className="text-zinc-500">
-                        {" "}
-                        (crédits {c.walletPreview.scoreBreakdown.statementCredits}{" "}
-                        · earn {c.walletPreview.scoreBreakdown.earnStructure} ·
-                        règles {c.walletPreview.scoreBreakdown.rewardRules}
-                        {c.walletPreview.scoreBreakdown.annualFeePenalty !== 0
-                          ? ` · frais ${c.walletPreview.scoreBreakdown.annualFeePenalty}`
-                          : ""}
-                        )
+                    {c.walletScoreAnalyzing ? (
+                      <span className="font-medium text-violet-700 dark:text-violet-300">
+                        Analyzing rewards…
                       </span>
+                    ) : (
+                      <>
+                        {c.walletPreview.ruleHighlights[0] ?? "—"} ·{" "}
+                        <strong>{c.walletScore}/100</strong>
+                        <span className="text-zinc-500">
+                          {" "}
+                          (net ${c.walletPreview.scoreBreakdown.netValueUsd.toFixed(2)}
+                          /mo)
+                        </span>
+                      </>
+                    )}
                   </p>
                   {c.walletPreview.statementCreditHints.length > 0 && (
                     <p className="mt-1 line-clamp-2 text-xs text-amber-800/90 dark:text-amber-200/90">
@@ -181,11 +185,21 @@ export default function CardsPage() {
                 </div>
               </div>
               <div className="min-w-0 flex-1 border-t border-zinc-200/60 pt-3 sm:border-l sm:border-t-0 sm:pl-4 sm:pt-0 dark:border-zinc-800/60">
+                {!c.walletScoreAnalyzing && (
+                  <p className="mb-2 text-[11px] font-semibold text-violet-700 dark:text-violet-300">
+                    Score {c.walletScore}/100
+                  </p>
+                )}
                 <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">
-                  Points forts (règles)
+                  {c.walletScoreAnalyzing ? "Rewards" : "Points forts (règles)"}
                 </p>
                 <ul className="mt-1 space-y-0.5 text-xs text-zinc-700 dark:text-zinc-300">
-                  {c.walletPreview.ruleHighlights.length ? (
+                  {c.walletScoreAnalyzing ? (
+                    <li className="flex items-center gap-2 text-violet-800 dark:text-violet-200">
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-violet-600 border-t-transparent" />
+                      Analyzing rewards…
+                    </li>
+                  ) : c.walletPreview.ruleHighlights.length ? (
                     c.walletPreview.ruleHighlights.map((line) => (
                       <li key={line}>{line}</li>
                     ))

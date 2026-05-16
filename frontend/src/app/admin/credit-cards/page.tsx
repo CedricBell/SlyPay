@@ -11,10 +11,12 @@ type IntelJob = {
 };
 
 type ScoreBreakdown = {
-  statementCredits: number;
-  earnStructure: number;
-  rewardRules: number;
-  annualFeePenalty: number;
+  grossRewardsUsd: number;
+  statementCreditsUsd: number;
+  annualFeeUsd: number;
+  netValueUsd: number;
+  scoreOutOf100: number;
+  spendProfileLabel: string;
 };
 
 type Row = {
@@ -141,7 +143,7 @@ export default function AdminCreditCardsPage() {
               <th className="px-3 py-2 font-medium">Carte</th>
               <th className="px-3 py-2 font-medium">Score</th>
               <th className="px-3 py-2 font-medium">Catalogue</th>
-              <th className="px-3 py-2 font-medium">PDF source</th>
+              <th className="px-3 py-2 font-medium">Source Web</th>
               <th className="px-3 py-2 font-medium">Règles</th>
               <th className="px-3 py-2 font-medium">Job intel</th>
               <th className="px-3 py-2 font-medium">Actif</th>
@@ -172,25 +174,28 @@ export default function AdminCreditCardsPage() {
                   </p>
                 </td>
                 <td className="px-3 py-2 text-xs">
-                  <span className="text-lg font-semibold text-violet-700 dark:text-violet-300">
-                    {r.walletScore}
-                  </span>
-                  <p
-                    className="mt-1 max-w-[140px] text-[10px] leading-snug text-zinc-500"
-                    title={`Crédits PDF: ${r.walletScoreBreakdown.statementCredits} · Earn PDF: ${r.walletScoreBreakdown.earnStructure} · Règles: ${r.walletScoreBreakdown.rewardRules} · Cotisation annuelle: ${r.walletScoreBreakdown.annualFeePenalty}`}
-                  >
-                    crédits {r.walletScoreBreakdown.statementCredits} + earn{" "}
-                    {r.walletScoreBreakdown.earnStructure} + règles{" "}
-                    {r.walletScoreBreakdown.rewardRules}
-                    {r.walletScoreBreakdown.annualFeePenalty !== 0 && (
-                      <>
-                        {" "}
-                        <span className="text-amber-700 dark:text-amber-400">
-                          frais {r.walletScoreBreakdown.annualFeePenalty}
-                        </span>
-                      </>
-                    )}
-                  </p>
+                  {r.rewardRuleCount === 0 ? (
+                    <span className="text-zinc-400">—</span>
+                  ) : (
+                    <>
+                      <span className="text-lg font-semibold text-violet-700 dark:text-violet-300">
+                        {r.walletScore}
+                        <span className="text-sm font-normal text-zinc-500">/100</span>
+                      </span>
+                      <p
+                        className="mt-1 max-w-[160px] text-[10px] leading-snug text-zinc-500"
+                        title={`Rewards $${r.walletScoreBreakdown.grossRewardsUsd} + crédits $${r.walletScoreBreakdown.statementCreditsUsd}/mo · frais $${r.walletScoreBreakdown.annualFeeUsd}/an · net $${r.walletScoreBreakdown.netValueUsd}/mo`}
+                      >
+                        net ${r.walletScoreBreakdown.netValueUsd.toFixed(2)}/mo
+                        {r.walletScoreBreakdown.annualFeeUsd > 0 && (
+                          <>
+                            {" "}
+                            · frais ${r.walletScoreBreakdown.annualFeeUsd}/an
+                          </>
+                        )}
+                      </p>
+                    </>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-xs">
                   {r.catalogProductSlug ? (
@@ -226,7 +231,7 @@ export default function AdminCreditCardsPage() {
                       className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
                       title={r.officialDocumentUrl}
                     >
-                      PDF
+                      Web
                       <span aria-hidden>↗</span>
                     </a>
                   ) : (

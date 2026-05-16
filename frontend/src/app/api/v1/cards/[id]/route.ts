@@ -14,6 +14,7 @@ const cardInclude = {
       lastExtractJson: true,
       lastExtractHash: true,
       officialDocumentUrl: true,
+      rotatingBonusCalendar: true,
     },
   },
 } as const;

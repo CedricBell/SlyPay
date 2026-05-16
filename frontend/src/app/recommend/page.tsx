@@ -21,6 +21,7 @@ type CardRow = {
 
 type RecRes = {
   recommendationId: string | null;
+  evaluationDate?: string;
   amount: number;
   resolvedCategory: string;
   categoryResolution: { trace: string[] };
@@ -40,6 +41,14 @@ type RecRes = {
     earningType: string;
     last4?: string | null;
     colorHex?: string | null;
+    catalogRotatingQuarters?: Array<{
+      validFrom: string;
+      validUntil: string;
+      categories: string[];
+      multiplier: number;
+      label: string;
+      details?: string;
+    }> | null;
   }>;
   alternatesTied: string[];
   marketBest: {
@@ -575,6 +584,7 @@ export default function RecommendPage() {
         <RecommendationCard
           amount={result.amount}
           resolvedCategory={result.resolvedCategory}
+          evaluationDate={result.evaluationDate}
           bestCard={result.bestCard}
           reasoning={result.reasoning}
           ranked={result.ranked}

@@ -8,6 +8,10 @@ import { resolveSpendCategory } from "@/server/category-resolver";
 import { decideBestCard } from "@/server/decision-engine";
 import type { EngineCard } from "@/server/decision-engine.types";
 import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
+import {
+  mergeEngineOffers,
+  rotatingCalendarToEngineOffers,
+} from "@/server/rotating-bonus-calendar";
 
 const bodySchema = z.object({
   amount: z.number().min(0.01),
@@ -39,37 +43,57 @@ export async function POST(req: NextRequest) {
     mcc: dto.mcc,
   });
 
+  const now = new Date();
+
   const dbCards = await prisma.creditCard.findMany({
     where: { userId: ctx.appUser.id, isActive: true },
-    include: { rewardRules: true, offers: true },
+    include: {
+      rewardRules: true,
+      offers: true,
+      catalogProduct: {
+        select: { slug: true, rotatingBonusCalendar: true },
+      },
+    },
   });
 
-  const cards: EngineCard[] = dbCards.map((c) => ({
-    id: c.id,
-    name: c.name,
-    issuer: c.issuer,
-    rules: c.rewardRules.map((r) => ({
-      category: r.category,
-      multiplier: dec(r.multiplier),
-      earningType: r.earningType,
-      capAmountMonthly: r.capAmountMonthly ? dec(r.capAmountMonthly) : null,
-      priority: r.priority,
-    })),
-    offers: c.offers.map((o) => ({
+  const cards: EngineCard[] = dbCards.map((c) => {
+    const manualOffers = c.offers.map((o) => ({
       category: o.category,
       multiplier: dec(o.multiplier),
       stackPolicy: o.stackPolicy,
       validFrom: o.validFrom,
       validUntil: o.validUntil,
       title: o.title,
-    })),
-  }));
+    }));
+    const calJson =
+      c.catalogProduct?.rotatingBonusCalendar ??
+      CARD_CATALOG_ENTRIES.find(
+        (e) => e.id === (c.catalogProduct?.slug ?? c.catalogProductSlug),
+      )?.rotatingBonusCalendar ??
+      null;
+    return {
+      id: c.id,
+      name: c.name,
+      issuer: c.issuer,
+      rules: c.rewardRules.map((r) => ({
+        category: r.category,
+        multiplier: dec(r.multiplier),
+        earningType: r.earningType,
+        capAmountMonthly: r.capAmountMonthly ? dec(r.capAmountMonthly) : null,
+        priority: r.priority,
+      })),
+      offers: mergeEngineOffers(
+        manualOffers,
+        rotatingCalendarToEngineOffers(calJson),
+      ),
+    };
+  });
 
   const engineResult = decideBestCard({
     amount: dto.amount,
     resolvedCategory: resolution.category,
     cards,
-    now: new Date(),
+    now,
   });
   const marketCards: EngineCard[] = CARD_CATALOG_ENTRIES.map((c) => ({
     id: `catalog:${c.id}`,
@@ -82,13 +106,13 @@ export async function POST(req: NextRequest) {
       capAmountMonthly: null,
       priority: 0,
     })),
-    offers: [],
+    offers: rotatingCalendarToEngineOffers(c.rotatingBonusCalendar ?? null),
   }));
   const marketResult = decideBestCard({
     amount: dto.amount,
     resolvedCategory: resolution.category,
     cards: marketCards,
-    now: new Date(),
+    now,
   });
 
   const explanation = {
@@ -133,6 +157,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     recommendationId,
+    evaluationDate: now.toISOString(),
     amount: dto.amount,
     resolvedCategory: resolution.category,
     categoryResolution: {
@@ -154,6 +179,13 @@ export async function POST(req: NextRequest) {
     alternatesTied: engineResult.alternatesTied,
     ranked: engineResult.ranked.map((r) => {
       const card = dbCards.find((c) => c.id === r.cardId);
+      const calJson =
+        card?.catalogProduct?.rotatingBonusCalendar ??
+        CARD_CATALOG_ENTRIES.find(
+          (e) =>
+            e.id === (card?.catalogProduct?.slug ?? card?.catalogProductSlug),
+        )?.rotatingBonusCalendar ??
+        null;
       return {
         cardId: r.cardId,
         cardName: r.cardName,
@@ -163,6 +195,7 @@ export async function POST(req: NextRequest) {
         earningType: r.earningType,
         last4: card?.last4 ?? null,
         colorHex: card?.colorHex ?? null,
+        catalogRotatingQuarters: Array.isArray(calJson) ? calJson : null,
       };
     }),
     marketBest: marketResult.winner

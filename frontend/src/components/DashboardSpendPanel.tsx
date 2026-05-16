@@ -383,7 +383,7 @@ export function DashboardSpendPanel() {
                   <li>
                     Keep card rules up to date on{" "}
                     <Link href="/cards" className="font-medium text-violet-600">
-                      Cards
+                      My cards
                     </Link>{" "}
                     so recommendations match your real wallet.
                   </li>

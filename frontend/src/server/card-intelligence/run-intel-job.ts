@@ -1,10 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { replaceLinkedCardRewardRulesForCatalogSlug } from "@/server/card-intelligence/apply-catalog-proposal";
 import { sha256Hex, stableSerialize } from "@/server/canonical-hash";
-import { discoverOfficialPdfUrl } from "@/server/card-intelligence/discover-official-pdf-url";
+import {
+  discoverOfficialPdfUrl,
+  inferIntelDocumentKindFromUrl,
+  type IntelDocumentKind,
+} from "@/server/card-intelligence/discover-official-pdf-url";
 import { extractRewardsFromDocumentText } from "@/server/card-intelligence/extract-rewards";
-import { fetchPdfBuffer } from "@/server/card-intelligence/fetch-document";
+import {
+  fetchHtmlDocument,
+  fetchPdfBuffer,
+} from "@/server/card-intelligence/fetch-document";
+import { htmlDocumentToPlainText } from "@/server/card-intelligence/html-to-intel-text";
+import { normalizeIntelDocumentFetchUrl } from "@/server/card-intelligence/intel-document-intent";
+import { buildEditorialSupplementPlainText } from "@/server/card-intelligence/fetch-editorial-supplements";
 import { recordKnownIssuerAfterPdfVerified } from "@/server/card-intelligence/known-issuer-registry";
+import { resolveIntelIssuerAndCardName } from "@/server/catalog-infer";
 import { mapExtractToRewardRules } from "@/server/card-intelligence/map-extract-to-reward-rules";
 import { rewardsExtractSchema } from "@/server/card-intelligence/rewards-extract-schema";
 import { pdfBufferToText } from "@/server/card-intelligence/pdf-text";
@@ -55,19 +66,61 @@ export async function runCardIntelJob(params: {
       productSlug: params.productSlug,
       officialDocumentUrl: product.officialDocumentUrl,
     });
+    let sourceKind: IntelDocumentKind | null = null;
+
+    let issuerForJob = product.issuer;
+    let cardNameForJob = product.name;
+
+    const preResolve = resolveIntelIssuerAndCardName(
+      product.issuer,
+      product.name,
+    );
+    if (preResolve.corrected) {
+      issuerForJob = preResolve.issuer;
+      cardNameForJob = preResolve.cardName;
+      await prisma.cardCatalogProduct.update({
+        where: { slug: product.slug },
+        data: { issuer: issuerForJob, name: cardNameForJob },
+      });
+      await prisma.creditCard.updateMany({
+        where: { catalogProductSlug: product.slug },
+        data: { issuer: issuerForJob, name: cardNameForJob },
+      });
+    }
 
     if (!url) {
       try {
-        const { url: discovered } = await discoverOfficialPdfUrl({
-          issuer: product.issuer,
-          cardName: product.name,
+        const discovered = await discoverOfficialPdfUrl({
+          issuer: issuerForJob,
+          cardName: cardNameForJob,
           productSlug: product.slug,
         });
-        if (discovered) {
-          url = discovered;
+        if (discovered.resolvedIssuer && discovered.resolvedCardName) {
+          issuerForJob = discovered.resolvedIssuer;
+          cardNameForJob = discovered.resolvedCardName;
+          if (
+            discovered.resolvedIssuer !== product.issuer ||
+            discovered.resolvedCardName !== product.name
+          ) {
+            await prisma.cardCatalogProduct.update({
+              where: { slug: product.slug },
+              data: {
+                issuer: issuerForJob,
+                name: cardNameForJob,
+              },
+            });
+            await prisma.creditCard.updateMany({
+              where: { catalogProductSlug: product.slug },
+              data: { issuer: issuerForJob, name: cardNameForJob },
+            });
+          }
+        }
+        if (discovered.url && discovered.sourceKind) {
+          url = discovered.url;
+          sourceKind = discovered.sourceKind;
           await prisma.cardCatalogProduct.update({
             where: { slug: product.slug },
-            data: { officialDocumentUrl: discovered },
+            data: { officialDocumentUrl: discovered.url },
           });
         }
       } catch (e) {
@@ -77,11 +130,15 @@ export async function runCardIntelJob(params: {
           data: {
             status: "FAILED",
             finishedAt: new Date(),
-            errorMessage: `PDF discovery failed: ${msg.slice(0, 4000)}`,
+            errorMessage: `Issuer-site discovery failed: ${msg.slice(0, 4000)}`,
           },
         });
         return;
       }
+    }
+
+    if (url && !sourceKind) {
+      sourceKind = await inferIntelDocumentKindFromUrl(url);
     }
 
     if (!url) {
@@ -92,8 +149,8 @@ export async function runCardIntelJob(params: {
         Boolean(process.env.GOOGLE_API_KEY?.trim()) &&
         Boolean(process.env.GOOGLE_CSE_ID?.trim());
       const hint = !hasBrave && !hasGoogle
-        ? "Aucune URL PDF — ajoutez BRAVE_SEARCH_API_KEY (Brave Search API, quota gratuit), ou GOOGLE_API_KEY + GOOGLE_CSE_ID, ou officialDocumentUrl."
-        : "Aucun PDF trouvé (domaines officiels ou recherche web ouverte) — vérifiez le nom et l'émetteur, ou renseignez officialDocumentUrl.";
+        ? "Aucune URL de document — ajoutez BRAVE_SEARCH_API_KEY (Brave Search API, quota gratuit), ou GOOGLE_API_KEY + GOOGLE_CSE_ID, ou officialDocumentUrl."
+        : "Aucune page « rewards / rules » trouvée sur le site de la banque — vérifiez banque + nom de carte, ou renseignez officialDocumentUrl (admin). Pour réactiver la recherche site: via Google/Brave : INTEL_ALLOW_ISSUER_SITE_SEARCH=1.";
       await prisma.cardIntelJob.update({
         where: { id: job.id },
         data: {
@@ -105,23 +162,34 @@ export async function runCardIntelJob(params: {
       return;
     }
 
-    const pdfBuf = await fetchPdfBuffer(url);
-    const text = await pdfBufferToText(pdfBuf);
-    if (!text) {
-      throw new Error("Could not extract text from PDF");
+    const fetchUrl = normalizeIntelDocumentFetchUrl(url);
+    const text =
+      sourceKind === "html"
+        ? htmlDocumentToPlainText(await fetchHtmlDocument(fetchUrl))
+        : await pdfBufferToText(await fetchPdfBuffer(fetchUrl));
+    if (!text?.trim()) {
+      throw new Error("Could not extract text from document");
+    }
+
+    const supplemental = await buildEditorialSupplementPlainText(
+      product.editorialSupplementUrls,
+    );
+    let documentText = text.trim();
+    if (supplemental) {
+      documentText = `${documentText}\n\n===== SUPPLEMENTARY REFERENCE (THIRD-PARTY EDITORIAL — non-official; defer to issuer text above if anything conflicts) =====\n\n${supplemental}`;
     }
 
     const { issuerForRestOfJob } = await recordKnownIssuerAfterPdfVerified({
       documentUrl: url,
       productSlug: product.slug,
-      productIssuer: product.issuer,
-      productName: product.name,
+      productIssuer: issuerForJob,
+      productName: cardNameForJob,
     });
 
     const extracted = await extractRewardsFromDocumentText({
-      cardName: product.name,
+      cardName: cardNameForJob,
       issuer: issuerForRestOfJob,
-      documentText: text,
+      documentText,
     });
 
     const hash = sha256Hex(stableSerialize(extracted));
@@ -129,7 +197,7 @@ export async function runCardIntelJob(params: {
     if (!product.lastExtractHash) {
       const parsed = rewardsExtractSchema.parse(extracted);
       const drafts = await mapExtractToRewardRules({
-        productName: product.name,
+        productName: cardNameForJob,
         issuer: issuerForRestOfJob,
         extract: parsed,
       });

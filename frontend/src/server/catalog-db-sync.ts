@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { stableAdHocCatalogSlug } from "@/server/catalog-infer";
 import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
@@ -8,6 +9,11 @@ export async function upsertCatalogProductFromSlug(slug: string) {
   if (!entry) return null;
 
   const docUrl = entry.officialDocumentUrl ?? null;
+  const rotating = entry.rotatingBonusCalendar;
+  const rotatingJson: Prisma.InputJsonValue | typeof Prisma.JsonNull =
+    rotating && rotating.length > 0
+      ? (rotating as Prisma.InputJsonValue)
+      : Prisma.JsonNull;
 
   return prisma.cardCatalogProduct.upsert({
     where: { slug: entry.id },
@@ -18,6 +24,7 @@ export async function upsertCatalogProductFromSlug(slug: string) {
       colorHex: entry.colorHex ?? null,
       imageUrl: entry.imageUrl ?? null,
       officialDocumentUrl: docUrl,
+      rotatingBonusCalendar: rotatingJson,
     },
     update: {
       name: entry.name,
@@ -25,6 +32,7 @@ export async function upsertCatalogProductFromSlug(slug: string) {
       colorHex: entry.colorHex ?? null,
       imageUrl: entry.imageUrl ?? null,
       ...(docUrl ? { officialDocumentUrl: docUrl } : {}),
+      rotatingBonusCalendar: rotatingJson,
     },
   });
 }

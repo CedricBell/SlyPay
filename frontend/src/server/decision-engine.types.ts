@@ -7,6 +7,8 @@ export type EngineOffer = {
   validFrom: Date;
   validUntil: Date;
   title: string;
+  /** When set (e.g. curated rotating 5% cashback), overrides the base rule's earning type for this offer */
+  earningTypeOverride?: EarningType;
 };
 
 export type EngineRule = {

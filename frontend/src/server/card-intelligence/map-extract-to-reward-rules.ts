@@ -23,7 +23,7 @@ Output JSON array only. Each item:
 
 Rules:
 - Prefer specifics from earnRates; map vague merchant wording to closest SpendCategory; use OTHER for generic base earn if clearly stated.
-- If multiple rates apply to the same category, keep the primary everyday rate (not limited-time promos unless clearly labeled as core earn).
+- If multiple rates apply to the same category, keep the primary everyday rate from official terms when possible; editorial blocks may mention promos — note them in rule notes when mapping.
 - Always include an OTHER rule for the documented base/default earn when inferable; otherwise use multiplier 1 POINTS with a note that base earn was unclear.
 
 Respond with JSON: { "rules": [ ...mapped items... ] }`;

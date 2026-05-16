@@ -70,6 +70,10 @@ model CardCatalogProduct {
   lastExtractHash       String?
   lastExtractJson       Json?
   lastFetchedAt         DateTime?
+  /// Curated rotating bonus quarters (e.g. Discover / Freedom 5% calendars). Merged as time-bounded offers in the decision engine.
+  rotatingBonusCalendar Json?
+  /// Optional https URLs on allowlisted editorial hosts (e.g. thepointsguy.com, nerdwallet.com); HTML is merged after the official document for intel extraction only.
+  editorialSupplementUrls Json?
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 

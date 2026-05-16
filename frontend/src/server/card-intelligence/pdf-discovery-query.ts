@@ -97,12 +97,22 @@ export function siblingSlugExclusionTerms(
   return [...terms];
 }
 
+/**
+ * Search intent for official card intel: PDF **or** HTML (many issuers publish
+ * terms only on the web — e.g. `/apply/terms/...` — and `filetype:pdf` would hide them).
+ */
+const INTEL_DOC_HUMAN_INTENT =
+  "(terms OR benefits OR rewards OR agreement OR disclosure OR cardmember OR guide OR schumer OR \"fee table\")";
+
 export function buildIssuerScopedSearchQuery(args: {
   hosts: string[];
   cardName: string;
   exclusionTerms: string[];
+  /** Extra site: operators (e.g. creditcards.chase.com when apex is chase.com). */
+  extraSiteHosts?: string[];
 }): string {
-  const siteClause = args.hosts.map((h) => `site:${h}`).join(" OR ");
+  const allHosts = [...new Set([...args.hosts, ...(args.extraSiteHosts ?? [])])];
+  const siteClause = allHosts.map((h) => `site:${h}`).join(" OR ");
   const core = coreCardQueryPhrase(args.cardName);
   const fallback = args.cardName.replace(/"/g, " ").trim();
   const phrase =
@@ -118,7 +128,7 @@ export function buildIssuerScopedSearchQuery(args: {
   return [
     `(${siteClause})`,
     phrase,
-    "(filetype:pdf OR pdf OR rewards OR benefits OR agreement OR cardmember)",
+    INTEL_DOC_HUMAN_INTENT,
     neg,
   ]
     .filter(Boolean)
@@ -151,7 +161,7 @@ export function isPlaceholderIssuerForOpenSearch(issuer: string): boolean {
 
 /**
  * Web search without `site:` — used when the issuer is not mapped to official
- * domains. Keeps PDF-oriented keywords; pairing issuer+name when meaningful.
+ * domains. Document-oriented keywords; pairing issuer+name when meaningful.
  */
 export function buildOpenWebSearchQuery(args: {
   issuer: string;
@@ -171,11 +181,7 @@ export function buildOpenWebSearchQuery(args: {
     .filter((t) => t.length >= 3)
     .map((t) => `-${t}`)
     .join(" ");
-  return [
-    phrase,
-    "(filetype:pdf OR pdf OR rewards OR benefits OR agreement OR cardmember OR terms)",
-    neg,
-  ]
+  return [phrase, INTEL_DOC_HUMAN_INTENT, neg]
     .filter(Boolean)
     .join(" ")
     .replace(/\s+/g, " ")

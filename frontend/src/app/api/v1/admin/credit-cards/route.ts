@@ -26,12 +26,8 @@ export async function GET(req: NextRequest) {
         _count: { select: { rewardRules: true } },
         rewardRules: {
           orderBy: [{ priority: "asc" }, { multiplier: "desc" }],
-          select: {
-            category: true,
-            multiplier: true,
-            earningType: true,
-          },
         },
+        offers: true,
         catalogProduct: {
           select: {
             slug: true,
@@ -40,6 +36,7 @@ export async function GET(req: NextRequest) {
             lastExtractHash: true,
             lastExtractJson: true,
             lastFetchedAt: true,
+            rotatingBonusCalendar: true,
           },
         },
         intelJobs: {
@@ -65,8 +62,15 @@ export async function GET(req: NextRequest) {
       : null;
     const extractJson =
       cat?.lastExtractJson != null ? cat.lastExtractJson : null;
+    const calJson = cat?.rotatingBonusCalendar ?? null;
     const { total: walletScore, breakdown: walletScoreBreakdown } =
-      computeWalletScore(c.rewardRules, extractJson);
+      computeWalletScore(c.rewardRules, extractJson, {
+        cardId: c.id,
+        cardName: c.name,
+        issuer: c.issuer,
+        offers: c.offers,
+        rotatingBonusCalendar: calJson,
+      });
     const previewRules = c.rewardRules.slice(0, 10);
     return {
       id: c.id,

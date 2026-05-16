@@ -23,10 +23,8 @@ export const metadata: Metadata = {
   description:
     "Transaction-level credit card recommendations from official-style rules, offers, and merchant context.",
   manifest: "/manifest.webmanifest",
-  icons: {
-    icon: [{ url: "/icon.png", type: "image/png" }],
-    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
-  },
+  // Favicon: `src/app/icon.png` + `apple-icon.png` (App Router file convention).
+  // Do not add `src/app/favicon.ico` — it overrides icon.png (often the Vercel template).
   appleWebApp: {
     capable: true,
     title: "SlyPay",
@@ -46,7 +44,7 @@ export default function RootLayout({
       >
         <PwaRegister />
         <NavBar />
-        <main className="mx-auto max-w-5xl px-4 py-8 pb-28 md:pb-10">
+        <main className="relative z-[1] isolate mx-auto max-w-5xl px-4 py-8 pb-28 md:pb-10">
           {children}
         </main>
       </body>

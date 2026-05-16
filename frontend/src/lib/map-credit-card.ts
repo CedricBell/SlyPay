@@ -6,6 +6,7 @@ import type {
 } from "@prisma/client";
 import { dec } from "@/lib/serialize";
 import { computeWalletScore } from "@/lib/wallet-score";
+import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 
 export type CardWithRules = CreditCard & {
   rewardRules: RewardRule[];
@@ -19,6 +20,7 @@ export type CardWithRulesAndCatalog = CardWithRules & {
     | "lastExtractJson"
     | "lastExtractHash"
     | "officialDocumentUrl"
+    | "rotatingBonusCalendar"
   > | null;
 };
 
@@ -64,8 +66,22 @@ export function mapCreditCardJson(c: CardWithRulesAndCatalog) {
   );
   const hasExtract = Boolean(catalogProduct?.lastExtractJson);
   const extractJson = hasExtract ? catalogProduct?.lastExtractJson : null;
-  const { total: walletScore, breakdown: walletScoreBreakdown } =
-    computeWalletScore(c.rewardRules, extractJson);
+  const rotatingCal =
+    catalogProduct?.rotatingBonusCalendar ??
+    CARD_CATALOG_ENTRIES.find((e) => e.id === rest.catalogProductSlug)
+      ?.rotatingBonusCalendar ??
+    null;
+  const {
+    total: walletScore,
+    breakdown: walletScoreBreakdown,
+    analyzing: walletScoreAnalyzing,
+  } = computeWalletScore(c.rewardRules, extractJson, {
+    cardId: rest.id,
+    cardName: rest.name,
+    issuer: rest.issuer,
+    offers: c.offers,
+    rotatingBonusCalendar: rotatingCal,
+  });
 
   return {
     ...rest,
@@ -83,7 +99,9 @@ export function mapCreditCardJson(c: CardWithRulesAndCatalog) {
     catalogSlug: catalogProduct?.slug ?? rest.catalogProductSlug ?? null,
     hasOfficialPdfExtract: hasExtract,
     officialDocumentUrl: catalogProduct?.officialDocumentUrl ?? null,
+    rotatingBonusCalendar: rotatingCal,
     walletScore,
+    walletScoreAnalyzing,
     walletPreview: {
       ruleHighlights: rulesStrengthLines(c.rewardRules),
       pdfSummary: summaryLine,

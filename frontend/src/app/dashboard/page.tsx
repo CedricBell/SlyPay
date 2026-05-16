@@ -76,7 +76,7 @@ export default function DashboardPage() {
             href="/cards"
             className="mt-4 inline-flex text-sm font-semibold text-violet-600 hover:underline dark:text-violet-400"
           >
-            Manage cards →
+            My cards →
           </Link>
         </div>
         <div className="rounded-3xl border border-zinc-200/70 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-transparent p-5 shadow-md backdrop-blur-xl dark:border-zinc-800/80">
@@ -146,7 +146,7 @@ export default function DashboardPage() {
           href="/cards"
           className="rounded-2xl border border-zinc-300/80 bg-white/60 px-5 py-3 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-white dark:border-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-50 dark:hover:bg-zinc-900"
         >
-          Update wallet rules
+          My cards
         </Link>
       </div>
     </div>

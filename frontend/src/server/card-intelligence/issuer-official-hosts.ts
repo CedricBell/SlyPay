@@ -3,6 +3,7 @@ import {
   normalizeIssuer,
   resolveIssuerOfficialHosts,
 } from "@/server/card-intelligence/issuer-official-domains";
+import { guessIssuerApexDomainsFromDisplayName } from "@/server/card-intelligence/issuer-domain-guess";
 import { isPlaceholderIssuerForOpenSearch } from "@/server/card-intelligence/pdf-discovery-query";
 
 /**
@@ -12,22 +13,25 @@ import { isPlaceholderIssuerForOpenSearch } from "@/server/card-intelligence/pdf
 export async function resolveIssuerOfficialHostsWithDb(
   issuerRaw: string,
 ): Promise<string[]> {
-  const staticHosts = resolveIssuerOfficialHosts(issuerRaw);
-  if (staticHosts.length > 0) return staticHosts;
-  if (isPlaceholderIssuerForOpenSearch(issuerRaw)) return [];
+  const hosts = new Set<string>(resolveIssuerOfficialHosts(issuerRaw));
+  for (const g of guessIssuerApexDomainsFromDisplayName(issuerRaw)) {
+    hosts.add(g);
+  }
 
-  const needle = normalizeIssuer(issuerRaw);
-  if (!needle) return [];
-
-  const rows = await prisma.knownIssuer.findMany({
-    take: 500,
-    orderBy: { lastSeenAt: "desc" },
-  });
-  const hosts = new Set<string>();
-  for (const r of rows) {
-    if (normalizeIssuer(r.displayName) === needle) {
-      hosts.add(r.apexDomain);
+  if (!isPlaceholderIssuerForOpenSearch(issuerRaw)) {
+    const needle = normalizeIssuer(issuerRaw);
+    if (needle) {
+      const rows = await prisma.knownIssuer.findMany({
+        take: 500,
+        orderBy: { lastSeenAt: "desc" },
+      });
+      for (const r of rows) {
+        if (normalizeIssuer(r.displayName) === needle) {
+          hosts.add(r.apexDomain);
+        }
+      }
     }
   }
+
   return [...hosts];
 }

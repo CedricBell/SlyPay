@@ -35,10 +35,12 @@ type WalletPreview = {
   pdfSummary: string | null;
   statementCreditHints: string[];
   scoreBreakdown?: {
-    statementCredits: number;
-    earnStructure: number;
-    rewardRules: number;
-    annualFeePenalty?: number;
+    grossRewardsUsd: number;
+    statementCreditsUsd: number;
+    annualFeeUsd: number;
+    netValueUsd: number;
+    scoreOutOf100: number;
+    spendProfileLabel: string;
   };
 };
 
@@ -60,6 +62,7 @@ type CardDetail = {
   officialDocumentUrl?: string | null;
   walletPreview?: WalletPreview;
   walletScore?: number;
+  walletScoreAnalyzing?: boolean;
 };
 
 export default function EditCardPage() {
@@ -77,6 +80,7 @@ export default function EditCardPage() {
     hasOfficialPdfExtract: boolean;
     walletPreview: WalletPreview | undefined;
     walletScore: number | undefined;
+    walletScoreAnalyzing?: boolean;
   } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -104,6 +108,7 @@ export default function EditCardPage() {
           hasOfficialPdfExtract: Boolean(c.hasOfficialPdfExtract),
           walletPreview: c.walletPreview,
           walletScore: c.walletScore,
+          walletScoreAnalyzing: c.walletScoreAnalyzing,
         });
         setInit(true);
       } catch (e) {
@@ -265,24 +270,23 @@ export default function EditCardPage() {
                   <code className="rounded bg-white px-1 py-0.5 font-mono dark:bg-zinc-900">
                     {intel.catalogSlug}
                   </code>
-                  {intel.walletScore != null && (
+                  {intel.walletScoreAnalyzing ? (
+                    <span className="ml-2 font-medium text-violet-700 dark:text-violet-300">
+                      · Analyzing rewards…
+                    </span>
+                  ) : intel.walletScore != null ? (
                     <span className="ml-2">
-                      · Wallet score:{" "}
-                      <strong>{Math.round(intel.walletScore)}</strong>
+                      · Score{" "}
+                      <strong>{Math.round(intel.walletScore)}/100</strong>
                       {intel.walletPreview?.scoreBreakdown && (
                         <span className="text-zinc-500">
                           {" "}
-                          (credits {intel.walletPreview.scoreBreakdown.statementCredits}
-                          , earn {intel.walletPreview.scoreBreakdown.earnStructure}, rules{" "}
-                          {intel.walletPreview.scoreBreakdown.rewardRules}
-                          {intel.walletPreview.scoreBreakdown.annualFeePenalty
-                            ? `, annual fee ${intel.walletPreview.scoreBreakdown.annualFeePenalty}`
-                            : ""}
-                          )
+                          (net ${intel.walletPreview.scoreBreakdown.netValueUsd.toFixed(2)}
+                          /mo · {intel.walletPreview.scoreBreakdown.spendProfileLabel})
                         </span>
                       )}
                     </span>
-                  )}
+                  ) : null}
                 </p>
               )}
               {intel.officialDocumentUrl ? (

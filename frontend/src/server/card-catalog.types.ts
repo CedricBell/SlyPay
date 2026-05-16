@@ -1,4 +1,5 @@
-import { EarningType, SpendCategory } from "@prisma/client";
+import type { EarningType, SpendCategory } from "@prisma/client";
+import type { RotatingBonusQuarterSpec } from "@/server/rotating-bonus-calendar";
 
 export type CardCatalogRule = {
   category: SpendCategory;
@@ -18,6 +19,10 @@ export type CardCatalogEntry = {
    * Populate deliberately — fetching respects SSRF guards (https only, no localhost).
    */
   officialDocumentUrl?: string;
+  /**
+   * Rotating quarterly bonuses (e.g. 5% calendars). Synced to DB and merged at recommendation time.
+   */
+  rotatingBonusCalendar?: RotatingBonusQuarterSpec[];
   /**
    * Legacy UI helpers — intentionally empty at source of truth; use PDF-derived snapshots in DB.
    */

@@ -1,4 +1,5 @@
 import type { CardCatalogEntry } from "./card-catalog.types";
+import { ROTATING_CALENDARS_BY_SLUG } from "@/server/rotating-calendars.data";
 
 /**
  * Catalog identities for autocomplete + `CardCatalogProduct.slug`.
@@ -248,4 +249,5 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = RAW.map((r) => ({
   officialDocumentUrl: r.officialDocumentUrl,
   imageUrl: cardImage(r.imageLabel),
   rules: [],
+  rotatingBonusCalendar: ROTATING_CALENDARS_BY_SLUG[r.id],
 }));

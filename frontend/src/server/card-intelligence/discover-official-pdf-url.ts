@@ -1,13 +1,31 @@
 import net from "node:net";
 import { hostnameMatchesIssuer } from "@/server/card-intelligence/issuer-official-domains";
 import { resolveIssuerOfficialHostsWithDb } from "@/server/card-intelligence/issuer-official-hosts";
+import { resolveIssuerCrawlOrigins } from "@/server/card-intelligence/issuer-crawl-origins";
 import {
   buildIssuerScopedSearchQuery,
   buildOpenWebSearchQuery,
   scorePdfCandidate,
   siblingSlugExclusionTerms,
 } from "@/server/card-intelligence/pdf-discovery-query";
+import {
+  classifyIntelDocumentIntent,
+  intentScoreAdjustment,
+} from "@/server/card-intelligence/intel-document-intent";
+import {
+  looksLikeOfficialTermsHtmlPath,
+  pathBonusForIntelDocument,
+} from "@/server/card-intelligence/intel-path-bonus";
+import { issuerUsesOnlyGuessedDomains } from "@/server/card-intelligence/issuer-domain-guess";
+import { discoverIntelViaCardProductPage } from "@/server/card-intelligence/issuer-card-page-discovery";
+import { harvestIssuerSiteLinks } from "@/server/card-intelligence/issuer-site-crawl";
 import { hostnameResolvesOnlyToPublicAddresses } from "@/server/card-intelligence/public-pdf-host";
+import { resolveIntelIssuerAndCardName } from "@/server/catalog-infer";
+
+function openWebDiscoveryEnabled(): boolean {
+  const v = process.env.INTEL_ALLOW_OPEN_WEB?.trim().toLowerCase();
+  return v === "1" || v === "true" || v === "yes";
+}
 
 type GoogleCseItem = { link?: string; title?: string; snippet?: string };
 type GoogleCseResponse = { items?: GoogleCseItem[] };
@@ -18,6 +36,31 @@ type BraveWebResponse = {
 };
 
 type SearchHit = { url: string; hint: string };
+
+export type IntelDocumentKind = "pdf" | "html";
+
+type EnrichedHit = {
+  url: string;
+  base: number;
+  pb: number;
+  total: number;
+  isPdf: boolean;
+  index: number;
+};
+
+/** Infer from URL path + optional HEAD `Content-Type` (PDFs without `.pdf` extension). */
+export async function inferIntelDocumentKindFromUrl(
+  raw: string,
+): Promise<IntelDocumentKind> {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return "html";
+  }
+  if (url.protocol !== "https:") return "html";
+  return (await looksLikePdfUrl(url)) ? "pdf" : "html";
+}
 
 async function looksLikePdfUrl(url: URL): Promise<boolean> {
   const path = url.pathname.toLowerCase();
@@ -35,7 +78,70 @@ async function looksLikePdfUrl(url: URL): Promise<boolean> {
   }
 }
 
-async function pickBestOfficialPdf(
+async function resolveBestIntelFromEnriched(
+  rows: EnrichedHit[],
+  opts: { openWebDnsCheck: boolean },
+): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
+  const rankedTotal = (r: EnrichedHit) =>
+    r.total + intentScoreAdjustment(classifyIntelDocumentIntent(r.url));
+
+  let ordered = [...rows].sort(
+    (a, b) => rankedTotal(b) - rankedTotal(a) || a.index - b.index,
+  );
+
+  if (opts.openWebDnsCheck) {
+    const ok: EnrichedHit[] = [];
+    for (const r of ordered) {
+      try {
+        const host = new URL(r.url).hostname;
+        if (await hostnameResolvesOnlyToPublicAddresses(host)) {
+          ok.push(r);
+        }
+      } catch {
+        /* skip */
+      }
+    }
+    ordered = ok;
+  }
+
+  const bestPdf = ordered.find((r) => r.isPdf) ?? null;
+  const strongHtmlList = ordered.filter((r) => !r.isPdf && r.pb >= 52);
+  const bestStrongHtml = strongHtmlList[0] ?? null;
+
+  if (bestStrongHtml && bestPdf) {
+    const pdfIntent = classifyIntelDocumentIntent(bestPdf.url);
+    const htmlIntent = classifyIntelDocumentIntent(bestStrongHtml.url);
+    if (pdfIntent === "pricing_legal" && htmlIntent !== "pricing_legal") {
+      return { url: bestStrongHtml.url, sourceKind: "html" };
+    }
+    if (
+      rankedTotal(bestStrongHtml) >= rankedTotal(bestPdf) - 8 ||
+      htmlIntent === "offer_rewards"
+    ) {
+      return { url: bestStrongHtml.url, sourceKind: "html" };
+    }
+    return { url: bestPdf.url, sourceKind: "pdf" };
+  }
+  if (bestStrongHtml && !bestPdf) {
+    return { url: bestStrongHtml.url, sourceKind: "html" };
+  }
+  if (bestPdf) {
+    return { url: bestPdf.url, sourceKind: "pdf" };
+  }
+
+  const weakHtml = ordered.find(
+    (r) =>
+      !r.isPdf &&
+      looksLikeOfficialTermsHtmlPath(new URL(r.url)) &&
+      r.pb >= 22,
+  );
+  if (weakHtml) {
+    return { url: weakHtml.url, sourceKind: "html" };
+  }
+  return null;
+}
+
+async function pickBestOfficialIntelSource(
   hosts: string[],
   hits: SearchHit[],
   opts: {
@@ -44,8 +150,16 @@ async function pickBestOfficialPdf(
     productSlug: string;
     exclusionTerms: string[];
   },
-): Promise<string | null> {
-  const scored: { url: string; score: number; index: number }[] = [];
+): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
+  const pdfCache = new Map<string, boolean>();
+  async function isPdfCached(raw: string): Promise<boolean> {
+    if (!pdfCache.has(raw)) {
+      pdfCache.set(raw, await looksLikePdfUrl(new URL(raw)));
+    }
+    return pdfCache.get(raw)!;
+  }
+
+  const enriched: EnrichedHit[] = [];
   for (let i = 0; i < hits.length; i++) {
     const { url: raw, hint } = hits[i];
     let url: URL;
@@ -56,7 +170,7 @@ async function pickBestOfficialPdf(
     }
     if (url.protocol !== "https:") continue;
     if (!hostnameMatchesIssuer(url.hostname, hosts)) continue;
-    const score = scorePdfCandidate({
+    const base = scorePdfCandidate({
       url: raw,
       hint,
       cardName: opts.cardName,
@@ -65,20 +179,25 @@ async function pickBestOfficialPdf(
       exclusionTerms: opts.exclusionTerms,
       resultIndex: i,
     });
-    scored.push({ url: raw, score, index: i });
+    const pb = pathBonusForIntelDocument(url);
+    const isPdf = await isPdfCached(raw);
+    enriched.push({
+      url: raw,
+      base,
+      pb,
+      total: base + pb,
+      isPdf,
+      index: i,
+    });
   }
-  scored.sort((a, b) => b.score - a.score || a.index - b.index);
-  for (const c of scored) {
-    if (await looksLikePdfUrl(new URL(c.url))) return c.url;
-  }
-  return null;
+
+  return resolveBestIntelFromEnriched(enriched, { openWebDnsCheck: false });
 }
 
 /**
- * Open-web ranking: same textual scoring, but any HTTPS host whose DNS resolves
- * only to public IPs (SSRF mitigation). Skips literal-IP URLs in results.
+ * Open-web: same ranking as scoped, plus public-DNS filter for each candidate.
  */
-async function pickBestOpenWebPdf(
+async function pickBestOpenWebIntelSource(
   hits: SearchHit[],
   opts: {
     cardName: string;
@@ -86,8 +205,16 @@ async function pickBestOpenWebPdf(
     productSlug: string;
     exclusionTerms: string[];
   },
-): Promise<string | null> {
-  const scored: { url: string; score: number; index: number }[] = [];
+): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
+  const pdfCache = new Map<string, boolean>();
+  async function isPdfCached(raw: string): Promise<boolean> {
+    if (!pdfCache.has(raw)) {
+      pdfCache.set(raw, await looksLikePdfUrl(new URL(raw)));
+    }
+    return pdfCache.get(raw)!;
+  }
+
+  const enriched: EnrichedHit[] = [];
   for (let i = 0; i < hits.length; i++) {
     const { url: raw, hint } = hits[i];
     let url: URL;
@@ -98,7 +225,7 @@ async function pickBestOpenWebPdf(
     }
     if (url.protocol !== "https:") continue;
     if (net.isIP(url.hostname)) continue;
-    const score = scorePdfCandidate({
+    const base = scorePdfCandidate({
       url: raw,
       hint,
       cardName: opts.cardName,
@@ -107,15 +234,19 @@ async function pickBestOpenWebPdf(
       exclusionTerms: opts.exclusionTerms,
       resultIndex: i,
     });
-    scored.push({ url: raw, score, index: i });
+    const pb = pathBonusForIntelDocument(url);
+    const isPdf = await isPdfCached(raw);
+    enriched.push({
+      url: raw,
+      base,
+      pb,
+      total: base + pb,
+      isPdf,
+      index: i,
+    });
   }
-  scored.sort((a, b) => b.score - a.score || a.index - b.index);
-  for (const c of scored.slice(0, 18)) {
-    const url = new URL(c.url);
-    if (!(await hostnameResolvesOnlyToPublicAddresses(url.hostname))) continue;
-    if (await looksLikePdfUrl(url)) return c.url;
-  }
-  return null;
+
+  return resolveBestIntelFromEnriched(enriched, { openWebDnsCheck: true });
 }
 
 async function fetchBraveHits(searchQuery: string): Promise<SearchHit[]> {
@@ -178,20 +309,34 @@ async function fetchGoogleHits(searchQuery: string): Promise<SearchHit[]> {
     .filter((x): x is SearchHit => Boolean(x.url));
 }
 
+function siteHostsForScopedSearch(issuer: string, apexHosts: string[]): string[] {
+  const extra = resolveIssuerCrawlOrigins(issuer)
+    .map((o) => {
+      try {
+        return new URL(o).hostname;
+      } catch {
+        return null;
+      }
+    })
+    .filter((h): h is string => Boolean(h));
+  return [...new Set([...apexHosts, ...extra])];
+}
+
 async function discoverScopedPdfUrlViaBrave(args: {
   issuer: string;
   cardName: string;
   productSlug: string;
   hosts: string[];
   exclusionTerms: string[];
-}): Promise<string | null> {
+}): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
   const q = buildIssuerScopedSearchQuery({
     hosts: args.hosts,
     cardName: args.cardName,
     exclusionTerms: args.exclusionTerms,
+    extraSiteHosts: siteHostsForScopedSearch(args.issuer, args.hosts),
   });
   const hits = await fetchBraveHits(q);
-  return pickBestOfficialPdf(args.hosts, hits, {
+  return pickBestOfficialIntelSource(args.hosts, hits, {
     cardName: args.cardName,
     issuer: args.issuer,
     productSlug: args.productSlug,
@@ -205,14 +350,15 @@ async function discoverScopedPdfUrlViaGoogleCse(args: {
   productSlug: string;
   hosts: string[];
   exclusionTerms: string[];
-}): Promise<string | null> {
+}): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
   const q = buildIssuerScopedSearchQuery({
     hosts: args.hosts,
     cardName: args.cardName,
     exclusionTerms: args.exclusionTerms,
+    extraSiteHosts: siteHostsForScopedSearch(args.issuer, args.hosts),
   });
   const hits = await fetchGoogleHits(q);
-  return pickBestOfficialPdf(args.hosts, hits, {
+  return pickBestOfficialIntelSource(args.hosts, hits, {
     cardName: args.cardName,
     issuer: args.issuer,
     productSlug: args.productSlug,
@@ -225,7 +371,7 @@ async function discoverOpenWebPdfUrlViaBrave(args: {
   cardName: string;
   productSlug: string;
   exclusionTerms: string[];
-}): Promise<string | null> {
+}): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
   const q = buildOpenWebSearchQuery({
     issuer: args.issuer,
     cardName: args.cardName,
@@ -233,7 +379,7 @@ async function discoverOpenWebPdfUrlViaBrave(args: {
   });
   if (q.length < 4) return null;
   const hits = await fetchBraveHits(q);
-  return pickBestOpenWebPdf(hits, {
+  return pickBestOpenWebIntelSource(hits, {
     cardName: args.cardName,
     issuer: args.issuer,
     productSlug: args.productSlug,
@@ -246,7 +392,7 @@ async function discoverOpenWebPdfUrlViaGoogleCse(args: {
   cardName: string;
   productSlug: string;
   exclusionTerms: string[];
-}): Promise<string | null> {
+}): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
   const q = buildOpenWebSearchQuery({
     issuer: args.issuer,
     cardName: args.cardName,
@@ -254,7 +400,7 @@ async function discoverOpenWebPdfUrlViaGoogleCse(args: {
   });
   if (q.length < 4) return null;
   const hits = await fetchGoogleHits(q);
-  return pickBestOpenWebPdf(hits, {
+  return pickBestOpenWebIntelSource(hits, {
     cardName: args.cardName,
     issuer: args.issuer,
     productSlug: args.productSlug,
@@ -265,40 +411,66 @@ async function discoverOpenWebPdfUrlViaGoogleCse(args: {
 export type PdfDiscoveryProvider = "brave" | "google_cse" | null;
 
 /**
- * Prefers HTTPS PDFs on issuer-mapped official domains (`site:` query).
- * If the issuer has **no** mapped domains, runs an **open-web** search (no `site:`)
- * and keeps only candidates whose hostname resolves exclusively to public IPs.
- *
- * Order: Brave → Google CSE (or reversed when `PDF_DISCOVERY_PROVIDER=google_cse`).
+ * Finds rewards/terms on the **issuer's own site** when domains are mapped:
+ * 1) hub → card product page → « Rewards and rules » link (no search engine),
+ * 2) hub crawl fallback,
+ * 3) optional `site:issuer.com` via Brave/Google only if `INTEL_ALLOW_ISSUER_SITE_SEARCH=1`.
+ * Open-web search is **off** unless `INTEL_ALLOW_OPEN_WEB=1`.
  */
 export async function discoverOfficialPdfUrl(args: {
   issuer: string;
   cardName: string;
   /** Catalog slug — drives sibling exclusions (e.g. discover-it vs discover-it-miles). */
   productSlug: string;
-}): Promise<{ url: string | null; provider: PdfDiscoveryProvider }> {
-  const hosts = await resolveIssuerOfficialHostsWithDb(args.issuer);
-  const exclusionTerms = siblingSlugExclusionTerms(
-    args.issuer,
-    args.productSlug,
-  );
+}): Promise<{
+  url: string | null;
+  sourceKind: IntelDocumentKind | null;
+  provider: PdfDiscoveryProvider;
+  /** Issuer/card labels used for discovery (may differ from DB when placeholder was corrected). */
+  resolvedIssuer?: string;
+  resolvedCardName?: string;
+}> {
+  const resolved = resolveIntelIssuerAndCardName(args.issuer, args.cardName);
+  const issuer = resolved.issuer;
+  const cardName = resolved.cardName;
+
+  const hosts = await resolveIssuerOfficialHostsWithDb(issuer);
+  const exclusionTerms = siblingSlugExclusionTerms(issuer, args.productSlug);
+  const guessedOnly =
+    hosts.length > 0 && issuerUsesOnlyGuessedDomains(issuer, hosts);
   const prefer =
     process.env.PDF_DISCOVERY_PROVIDER?.trim().toLowerCase() ?? "";
 
   const scopedPayload = {
-    issuer: args.issuer,
-    cardName: args.cardName,
+    issuer,
+    cardName,
     productSlug: args.productSlug,
     hosts,
     exclusionTerms,
   };
 
   const openPayload = {
-    issuer: args.issuer,
-    cardName: args.cardName,
+    issuer,
+    cardName,
     productSlug: args.productSlug,
     exclusionTerms,
   };
+
+  type DiscoveryResult = {
+    url: string | null;
+    sourceKind: IntelDocumentKind | null;
+    provider: PdfDiscoveryProvider;
+    resolvedIssuer?: string;
+    resolvedCardName?: string;
+  };
+
+  const withResolved = (
+    r: Omit<DiscoveryResult, "resolvedIssuer" | "resolvedCardName">,
+  ): DiscoveryResult => ({
+    ...r,
+    resolvedIssuer: issuer,
+    resolvedCardName: cardName,
+  });
 
   const tryScopedBrave = () => discoverScopedPdfUrlViaBrave(scopedPayload);
   const tryScopedGoogle = () => discoverScopedPdfUrlViaGoogleCse(scopedPayload);
@@ -306,31 +478,132 @@ export async function discoverOfficialPdfUrl(args: {
   const tryOpenGoogle = () => discoverOpenWebPdfUrlViaGoogleCse(openPayload);
 
   if (hosts.length) {
+    const fromCardFlow = await discoverIntelViaCardProductPage({
+      hosts,
+      cardName,
+      issuer,
+      productSlug: args.productSlug,
+      exclusionTerms,
+    });
+    if (fromCardFlow) {
+      return withResolved({
+        url: fromCardFlow.url,
+        sourceKind: fromCardFlow.sourceKind,
+        provider: null,
+      });
+    }
+
+    const hubHits = await harvestIssuerSiteLinks({
+      hosts,
+      cardName,
+      issuer,
+      productSlug: args.productSlug,
+      exclusionTerms,
+    });
+    if (hubHits.length) {
+      const fromHub = await pickBestOfficialIntelSource(hosts, hubHits, {
+        cardName,
+        issuer,
+        productSlug: args.productSlug,
+        exclusionTerms,
+      });
+      if (fromHub) {
+        return withResolved({
+          url: fromHub.url,
+          sourceKind: fromHub.sourceKind,
+          provider: null,
+        });
+      }
+    }
+
+    // Last resort: issuer-scoped search (`site:chase.com` includes creditcards.chase.com).
     if (prefer === "google_cse" || prefer === "google") {
       const g = await tryScopedGoogle();
-      if (g) return { url: g, provider: "google_cse" };
+      if (g)
+        return withResolved({
+          url: g.url,
+          sourceKind: g.sourceKind,
+          provider: "google_cse",
+        });
       const b = await tryScopedBrave();
-      if (b) return { url: b, provider: "brave" };
-      return { url: null, provider: null };
+      if (b)
+        return withResolved({
+          url: b.url,
+          sourceKind: b.sourceKind,
+          provider: "brave",
+        });
+    } else {
+      const braveFirst = await tryScopedBrave();
+      if (braveFirst)
+        return withResolved({
+          url: braveFirst.url,
+          sourceKind: braveFirst.sourceKind,
+          provider: "brave",
+        });
+      const googleSecond = await tryScopedGoogle();
+      if (googleSecond)
+        return withResolved({
+          url: googleSecond.url,
+          sourceKind: googleSecond.sourceKind,
+          provider: "google_cse",
+        });
     }
-    const braveFirst = await tryScopedBrave();
-    if (braveFirst) return { url: braveFirst, provider: "brave" };
-    const googleSecond = await tryScopedGoogle();
-    if (googleSecond) return { url: googleSecond, provider: "google_cse" };
-    return { url: null, provider: null };
+
+    if (guessedOnly && !openWebDiscoveryEnabled()) {
+      const openBrave = await tryOpenBrave();
+      if (openBrave)
+        return withResolved({
+          url: openBrave.url,
+          sourceKind: openBrave.sourceKind,
+          provider: "brave",
+        });
+      const openGoogle = await tryOpenGoogle();
+      if (openGoogle)
+        return withResolved({
+          url: openGoogle.url,
+          sourceKind: openGoogle.sourceKind,
+          provider: "google_cse",
+        });
+    }
+
+    return withResolved({ url: null, sourceKind: null, provider: null });
+  }
+
+  if (!openWebDiscoveryEnabled()) {
+    return withResolved({ url: null, sourceKind: null, provider: null });
   }
 
   if (prefer === "google_cse" || prefer === "google") {
     const g = await tryOpenGoogle();
-    if (g) return { url: g, provider: "google_cse" };
+    if (g)
+      return withResolved({
+        url: g.url,
+        sourceKind: g.sourceKind,
+        provider: "google_cse",
+      });
     const b = await tryOpenBrave();
-    if (b) return { url: b, provider: "brave" };
-    return { url: null, provider: null };
+    if (b)
+      return withResolved({
+        url: b.url,
+        sourceKind: b.sourceKind,
+        provider: "brave",
+      });
+    return withResolved({ url: null, sourceKind: null, provider: null });
   }
 
   const openBrave = await tryOpenBrave();
-  if (openBrave) return { url: openBrave, provider: "brave" };
+  if (openBrave)
+    return withResolved({
+      url: openBrave.url,
+      sourceKind: openBrave.sourceKind,
+      provider: "brave",
+    });
   const openGoogle = await tryOpenGoogle();
-  if (openGoogle) return { url: openGoogle, provider: "google_cse" };
-  return { url: null, provider: null };
+  if (openGoogle)
+    return withResolved({
+      url: openGoogle.url,
+      sourceKind: openGoogle.sourceKind,
+      provider: "google_cse",
+    });
+  return withResolved({ url: null, sourceKind: null, provider: null });
 }

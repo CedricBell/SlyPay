@@ -1,8 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
 import { CardThumbnail } from "@/components/CardThumbnail";
+
+type RotatingQuarter = {
+  validFrom: string;
+  validUntil: string;
+  categories: string[];
+  multiplier: number;
+  label: string;
+  details?: string;
+};
 
 type Ranked = {
   cardId: string;
@@ -13,7 +22,24 @@ type Ranked = {
   earningType: string;
   last4?: string | null;
   colorHex?: string | null;
+  catalogRotatingQuarters?: RotatingQuarter[] | null;
 };
+
+function formatIsoRange(from: string, until: string): string {
+  try {
+    const a = new Date(from);
+    const b = new Date(until);
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return "";
+    const opts: Intl.DateTimeFormatOptions = {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    };
+    return `${a.toLocaleDateString(undefined, opts)} – ${b.toLocaleDateString(undefined, opts)}`;
+  } catch {
+    return "";
+  }
+}
 
 export type MismatchKind =
   | "WRONG_MERCHANT"
@@ -25,6 +51,7 @@ export type MismatchKind =
 type Props = {
   amount: number;
   resolvedCategory: string;
+  evaluationDate?: string | null;
   bestCard: {
     name: string;
     issuer: string;
@@ -61,6 +88,7 @@ const MISMATCH_OPTIONS: { kind: MismatchKind; label: string }[] = [
 export function RecommendationCard({
   amount,
   resolvedCategory,
+  evaluationDate,
   bestCard,
   reasoning,
   ranked,
@@ -219,6 +247,15 @@ export function RecommendationCard({
             <span className="font-mono text-xs text-zinc-600 dark:text-zinc-300">
               {resolvedCategory}
             </span>
+            {evaluationDate ? (
+              <span className="mt-1 block text-xs font-normal text-zinc-500">
+                Rates as of{" "}
+                {new Date(evaluationDate).toLocaleString(undefined, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </span>
+            ) : null}
             {merchantLabel ? (
               <span className="mt-1 block text-xs font-normal text-zinc-500">
                 Merchant: {merchantLabel}
@@ -286,30 +323,59 @@ export function RecommendationCard({
             </p>
             <ol className="mt-3 space-y-2">
               {ranked.map((r, idx) => (
-                <li
-                  key={r.cardId}
-                  className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/70 bg-white/60 px-2 py-2 pl-2 transition hover:border-violet-300/50 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:hover:border-violet-900/40"
-                >
-                  <span className="flex min-w-0 items-center gap-2.5">
-                    <CardThumbnail
-                      name={r.cardName}
-                      issuer={r.issuer}
-                      last4={r.last4}
-                      colorHex={r.colorHex}
-                      size="xs"
-                    />
-                    <span className="min-w-0">
-                      <span className="text-zinc-400">{idx + 1}. </span>
-                      <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                        {r.cardName}
-                      </span>{" "}
-                      <span className="text-zinc-500">({r.issuer})</span>
+                <Fragment key={r.cardId}>
+                  <li className="flex items-center justify-between gap-3 rounded-2xl border border-zinc-200/70 bg-white/60 px-2 py-2 pl-2 transition hover:border-violet-300/50 dark:border-zinc-800/80 dark:bg-zinc-900/30 dark:hover:border-violet-900/40">
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <CardThumbnail
+                        name={r.cardName}
+                        issuer={r.issuer}
+                        last4={r.last4}
+                        colorHex={r.colorHex}
+                        size="xs"
+                      />
+                      <span className="min-w-0">
+                        <span className="text-zinc-400">{idx + 1}. </span>
+                        <span className="font-medium text-zinc-900 dark:text-zinc-50">
+                          {r.cardName}
+                        </span>{" "}
+                        <span className="text-zinc-500">({r.issuer})</span>
+                      </span>
                     </span>
-                  </span>
-                  <span className="shrink-0 font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
-                    {r.effectiveMultiplier}x · {r.comparableValue.toFixed(2)}
-                  </span>
-                </li>
+                    <span className="shrink-0 font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
+                      {r.effectiveMultiplier}x · {r.comparableValue.toFixed(2)}
+                    </span>
+                  </li>
+                  {r.catalogRotatingQuarters &&
+                    r.catalogRotatingQuarters.length > 0 && (
+                      <li className="ml-8 list-none border-l border-zinc-200 pl-3 text-[11px] text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+                        <p className="font-semibold text-zinc-600 dark:text-zinc-300">
+                          Rotating / calendar bonuses (catalog)
+                        </p>
+                        <ul className="mt-1 space-y-1">
+                          {r.catalogRotatingQuarters.map((q, qi) => (
+                            <li key={qi}>
+                              <span className="text-zinc-700 dark:text-zinc-200">
+                                {q.label}
+                              </span>
+                              {q.categories?.length ? (
+                                <span className="ml-1 font-mono text-[10px] text-zinc-500">
+                                  · {q.categories.join(", ")} · {q.multiplier}%
+                                </span>
+                              ) : null}
+                              <span className="mt-0.5 block text-[10px] text-zinc-500">
+                                {formatIsoRange(q.validFrom, q.validUntil)}
+                              </span>
+                              {q.details ? (
+                                <span className="mt-0.5 block italic text-zinc-500">
+                                  {q.details}
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    )}
+                </Fragment>
               ))}
             </ol>
           </div>

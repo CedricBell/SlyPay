@@ -78,7 +78,7 @@ export default function AdminLayout({
               href="/admin/card-catalog"
               className="rounded-lg border border-zinc-200 px-3 py-1 font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
             >
-              Catalogue cartes
+              Intel catalogue
             </Link>
           </nav>
           </div>

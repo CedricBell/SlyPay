@@ -77,7 +77,8 @@ function applyOffersToMultiplier(
 
   for (const o of active) {
     if (o.stackPolicy === OfferStackPolicy.REPLACE_BASE) {
-      const candidate = { mult: o.multiplier, type: baseType, label: o.title };
+      const effType = o.earningTypeOverride ?? baseType;
+      const candidate = { mult: o.multiplier, type: effType, label: o.title };
       if (
         comparableRewardValue(1, candidate.mult, candidate.type) >
         comparableRewardValue(1, best.mult, best.type)
@@ -85,8 +86,9 @@ function applyOffersToMultiplier(
         best = candidate;
       }
     } else {
+      const effType = o.earningTypeOverride ?? baseType;
       const combined = baseMult + o.multiplier;
-      const candidate = { mult: combined, type: baseType, label: o.title };
+      const candidate = { mult: combined, type: effType, label: o.title };
       if (
         comparableRewardValue(1, candidate.mult, candidate.type) >
         comparableRewardValue(1, best.mult, best.type)
@@ -108,7 +110,8 @@ function applyOffersToMultiplier(
   return { mult: best.mult, type: best.type };
 }
 
-function scoreCard(
+/** Score one purchase slice (used by recommendation + household benchmark). */
+export function scoreCardForCategory(
   card: EngineCard,
   amount: number,
   category: SpendCategory,
@@ -204,7 +207,7 @@ export function decideBestCard(input: DecisionEngineInput): DecisionEngineResult
   }
 
   const ranked = input.cards.map((c) =>
-    scoreCard(
+    scoreCardForCategory(
       c,
       input.amount,
       input.resolvedCategory,
