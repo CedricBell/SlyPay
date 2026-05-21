@@ -44,6 +44,70 @@ enum UserRole {
   ADMIN
 }
 
+enum CardIntelJobStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  SKIPPED_NO_SOURCE
+}
+
+enum CardCatalogExtractProposalStatus {
+  PENDING
+  APPLIED
+  DISMISSED
+}
+
+model CardCatalogProduct {
+  slug                  String    @id
+  name                  String
+  issuer                String
+  colorHex              String?
+  imageUrl              String?
+  officialDocumentUrl   String?
+  lastExtractHash       String?
+  lastExtractJson       Json?
+  lastFetchedAt         DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  proposals   CardCatalogExtractProposal[]
+  intelJobs   CardIntelJob[]
+  creditCards CreditCard[]
+
+  @@index([issuer])
+}
+
+model CardCatalogExtractProposal {
+  id              String                           @id @default(cuid())
+  productSlug     String
+  product         CardCatalogProduct               @relation(fields: [productSlug], references: [slug], onDelete: Cascade)
+  previousHash    String?
+  proposedHash    String
+  proposedPayload Json
+  status          CardCatalogExtractProposalStatus @default(PENDING)
+  createdAt       DateTime                         @default(now())
+
+  @@index([productSlug, status])
+  @@index([createdAt])
+}
+
+model CardIntelJob {
+  id            String             @id @default(cuid())
+  productSlug   String
+  product       CardCatalogProduct @relation(fields: [productSlug], references: [slug], onDelete: Cascade)
+  creditCardId  String?
+  creditCard    CreditCard?        @relation(fields: [creditCardId], references: [id], onDelete: SetNull)
+  status        CardIntelJobStatus @default(PENDING)
+  errorMessage  String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  createdAt     DateTime           @default(now())
+
+  @@index([productSlug, createdAt])
+  @@index([creditCardId])
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -75,21 +139,25 @@ model RefreshToken {
 }
 
 model CreditCard {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  issuer    String
-  last4     String?
-  colorHex  String?  @default("#0f172a")
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String              @id @default(cuid())
+  userId             String
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String
+  issuer             String
+  last4              String?
+  colorHex           String?             @default("#0f172a")
+  isActive           Boolean             @default(true)
+  catalogProductSlug String?
+  catalogProduct     CardCatalogProduct? @relation(fields: [catalogProductSlug], references: [slug], onDelete: SetNull)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
   rewardRules RewardRule[]
   offers      Offer[]
+  intelJobs   CardIntelJob[]
 
   @@index([userId, isActive])
+  @@index([catalogProductSlug])
 }
 
 model RewardRule {

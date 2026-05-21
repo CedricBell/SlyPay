@@ -11,6 +11,8 @@ export type CardCatalogEntry = {
   name: string;
   issuer: string;
   colorHex?: string;
-  /** Approximate public earn structure — users should verify with their issuer */
+  imageUrl?: string;
+  officialDocumentUrl?: string;
+  /** Legacy UI templates — empty here; curated snapshots live in the DB intel pipeline. */
   rules: CardCatalogRule[];
 };

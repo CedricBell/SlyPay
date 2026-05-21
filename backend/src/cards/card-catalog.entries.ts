@@ -1,183 +1,251 @@
-import { EarningType, SpendCategory } from '@prisma/client';
-import { CardCatalogEntry } from './card-catalog.types';
+import type { CardCatalogEntry } from './card-catalog.types';
 
 /**
- * Curated templates for autocomplete (US-focused, illustrative rates).
- * Not affiliated with issuers — encourage users to adjust rules to their product.
+ * Catalog identities for autocomplete — aligned with the frontend catalog.
+ * Reward specifics are sourced via the intelligence pipeline when URLs are configured.
  */
-export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = [
+function cardImage(label: string): string {
+  return `https://placehold.co/320x200/111827/F9FAFB/png?text=${encodeURIComponent(label)}`;
+}
+
+type Raw = Pick<
+  CardCatalogEntry,
+  'id' | 'name' | 'issuer' | 'colorHex' | 'officialDocumentUrl'
+> & { imageLabel: string };
+
+const RAW: Raw[] = [
   {
     id: 'chase-sapphire-preferred',
     name: 'Sapphire Preferred',
     issuer: 'Chase',
     colorHex: '#0f172a',
-    rules: [
-      { category: SpendCategory.TRAVEL, multiplier: 2, earningType: EarningType.POINTS },
-      { category: SpendCategory.DINING, multiplier: 3, earningType: EarningType.POINTS },
-      { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.POINTS },
-    ],
+    imageLabel: 'Chase Sapphire Preferred',
   },
   {
     id: 'chase-sapphire-reserve',
     name: 'Sapphire Reserve',
     issuer: 'Chase',
     colorHex: '#14532d',
-    rules: [
-      { category: SpendCategory.TRAVEL, multiplier: 3, earningType: EarningType.POINTS },
-      { category: SpendCategory.DINING, multiplier: 3, earningType: EarningType.POINTS },
-      { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.POINTS },
-    ],
+    imageLabel: 'Chase Sapphire Reserve',
   },
   {
     id: 'chase-freedom-unlimited',
     name: 'Freedom Unlimited',
     issuer: 'Chase',
     colorHex: '#1e3a5f',
-    rules: [
-      { category: SpendCategory.DINING, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.DRUGSTORES, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.OTHER, multiplier: 1.5, earningType: EarningType.CASHBACK_PERCENT },
-    ],
+    imageLabel: 'Chase Freedom Unlimited',
   },
   {
     id: 'chase-freedom-flex',
     name: 'Freedom Flex',
     issuer: 'Chase',
     colorHex: '#0d9488',
-    rules: [
-      { category: SpendCategory.DINING, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.DRUGSTORES, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.CASHBACK_PERCENT },
-    ],
+    imageLabel: 'Chase Freedom Flex',
+  },
+  {
+    id: 'chase-amazon-prime-visa',
+    name: 'Prime Visa',
+    issuer: 'Chase',
+    colorHex: '#0a5a9c',
+    imageLabel: 'Prime Visa',
   },
   {
     id: 'amex-gold',
     name: 'American Express Gold Card',
     issuer: 'American Express',
     colorHex: '#b45309',
-    rules: [
-      { category: SpendCategory.DINING, multiplier: 4, earningType: EarningType.POINTS },
-      { category: SpendCategory.GROCERIES, multiplier: 4, earningType: EarningType.POINTS },
-      { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.POINTS },
-    ],
+    imageLabel: 'Amex Gold',
   },
   {
     id: 'amex-platinum',
     name: 'American Express Platinum Card',
     issuer: 'American Express',
     colorHex: '#a1a1aa',
-    rules: [
-      { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.POINTS },
-      { category: SpendCategory.DINING, multiplier: 1, earningType: EarningType.POINTS },
-      { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.POINTS },
-    ],
+    imageLabel: 'Amex Platinum',
   },
   {
     id: 'amex-blue-cash-preferred',
     name: 'Blue Cash Preferred',
     issuer: 'American Express',
     colorHex: '#006fcf',
-    rules: [
-      { category: SpendCategory.GROCERIES, multiplier: 6, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.GAS, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.CASHBACK_PERCENT },
-    ],
+    imageLabel: 'Amex Blue Cash Preferred',
+  },
+  {
+    id: 'amex-blue-cash-everyday',
+    name: 'Blue Cash Everyday',
+    issuer: 'American Express',
+    colorHex: '#2563eb',
+    imageLabel: 'Amex Blue Cash Everyday',
+  },
+  {
+    id: 'amex-green',
+    name: 'American Express Green Card',
+    issuer: 'American Express',
+    colorHex: '#166534',
+    imageLabel: 'Amex Green',
   },
   {
     id: 'citi-double-cash',
     name: 'Double Cash',
     issuer: 'Citi',
     colorHex: '#003b70',
-    rules: [
-      { category: SpendCategory.GAS, multiplier: 2, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.DRUGSTORES, multiplier: 2, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.OTHER, multiplier: 2, earningType: EarningType.CASHBACK_PERCENT },
-    ],
+    imageLabel: 'Citi Double Cash',
   },
   {
     id: 'citi-custom-cash',
     name: 'Custom Cash',
     issuer: 'Citi',
     colorHex: '#0ea5e9',
-    rules: [
-      { category: SpendCategory.GROCERIES, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.GAS, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.DINING, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.CASHBACK_PERCENT },
-    ],
+    imageLabel: 'Citi Custom Cash',
+  },
+  {
+    id: 'citi-premier',
+    name: 'Strata Premier',
+    issuer: 'Citi',
+    colorHex: '#1d4ed8',
+    imageLabel: 'Citi Strata Premier',
   },
   {
     id: 'capital-one-venture',
     name: 'Venture',
     issuer: 'Capital One',
     colorHex: '#1a1a1a',
-    rules: [
-      { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.MILES },
-      { category: SpendCategory.OTHER, multiplier: 2, earningType: EarningType.MILES },
-    ],
+    imageLabel: 'Capital One Venture',
+  },
+  {
+    id: 'capital-one-venture-x',
+    name: 'Venture X',
+    issuer: 'Capital One',
+    colorHex: '#111827',
+    imageLabel: 'Capital One Venture X',
+  },
+  {
+    id: 'capital-one-quicksilver',
+    name: 'Quicksilver',
+    issuer: 'Capital One',
+    colorHex: '#334155',
+    imageLabel: 'Capital One Quicksilver',
   },
   {
     id: 'capital-one-savor',
     name: 'Savor',
     issuer: 'Capital One',
     colorHex: '#7c3aed',
-    rules: [
-      { category: SpendCategory.DINING, multiplier: 4, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.ENTERTAINMENT, multiplier: 4, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.GROCERIES, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.CASHBACK_PERCENT },
-    ],
+    imageLabel: 'Capital One Savor',
+  },
+  {
+    id: 'capital-one-savorone',
+    name: 'SavorOne',
+    issuer: 'Capital One',
+    colorHex: '#6d28d9',
+    imageLabel: 'Capital One SavorOne',
   },
   {
     id: 'discover-it',
     name: 'Discover it',
     issuer: 'Discover',
     colorHex: '#f97316',
-    rules: [
-      { category: SpendCategory.GROCERIES, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.GAS, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.DINING, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.TRAVEL, multiplier: 5, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.CASHBACK_PERCENT },
-    ],
+    imageLabel: 'Discover it',
+  },
+  {
+    id: 'discover-it-miles',
+    name: 'Discover it Miles',
+    issuer: 'Discover',
+    colorHex: '#ea580c',
+    imageLabel: 'Discover it Miles',
   },
   {
     id: 'wells-fargo-active-cash',
     name: 'Active Cash',
     issuer: 'Wells Fargo',
     colorHex: '#d97706',
-    rules: [
-      { category: SpendCategory.TRAVEL, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.ONLINE_SHOPPING, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.OTHER, multiplier: 2, earningType: EarningType.CASHBACK_PERCENT },
-    ],
+    imageLabel: 'Wells Fargo Active Cash',
+  },
+  {
+    id: 'wells-fargo-autograph',
+    name: 'Autograph',
+    issuer: 'Wells Fargo',
+    colorHex: '#b45309',
+    imageLabel: 'Wells Fargo Autograph',
   },
   {
     id: 'boa-customized-cash',
     name: 'Customized Cash Rewards',
     issuer: 'Bank of America',
     colorHex: '#e11d48',
-    rules: [
-      { category: SpendCategory.ONLINE_SHOPPING, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.GAS, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.DINING, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.DRUGSTORES, multiplier: 3, earningType: EarningType.CASHBACK_PERCENT },
-      { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.CASHBACK_PERCENT },
-    ],
+    imageLabel: 'BofA Customized Cash',
+  },
+  {
+    id: 'boa-unlimited-cash',
+    name: 'Unlimited Cash Rewards',
+    issuer: 'Bank of America',
+    colorHex: '#be123c',
+    imageLabel: 'BofA Unlimited Cash',
   },
   {
     id: 'usbank-altitude-go',
     name: 'Altitude Go',
     issuer: 'U.S. Bank',
     colorHex: '#0369a1',
-    rules: [
-      { category: SpendCategory.DINING, multiplier: 4, earningType: EarningType.POINTS },
-      { category: SpendCategory.GROCERIES, multiplier: 2, earningType: EarningType.POINTS },
-      { category: SpendCategory.GAS, multiplier: 2, earningType: EarningType.POINTS },
-      { category: SpendCategory.OTHER, multiplier: 1, earningType: EarningType.POINTS },
-    ],
+    imageLabel: 'US Bank Altitude Go',
+  },
+  {
+    id: 'usbank-cash-plus',
+    name: 'Cash+ Visa Signature',
+    issuer: 'U.S. Bank',
+    colorHex: '#075985',
+    imageLabel: 'US Bank Cash Plus',
+  },
+  {
+    id: 'barclays-arrival-plus',
+    name: 'Arrival Plus',
+    issuer: 'Barclays',
+    colorHex: '#1e40af',
+    imageLabel: 'Barclays Arrival Plus',
+  },
+  {
+    id: 'apple-card',
+    name: 'Apple Card',
+    issuer: 'Goldman Sachs',
+    colorHex: '#e5e7eb',
+    imageLabel: 'Apple Card',
+  },
+  {
+    id: 'paypal-cashback-mastercard',
+    name: 'PayPal Cashback Mastercard',
+    issuer: 'Synchrony',
+    colorHex: '#0f4da2',
+    imageLabel: 'PayPal Cashback Mastercard',
+  },
+  {
+    id: 'bilt-mastercard',
+    name: 'Bilt Mastercard',
+    issuer: 'Wells Fargo',
+    colorHex: '#1f2937',
+    imageLabel: 'Bilt Mastercard',
+  },
+  {
+    id: 'costco-anywhere',
+    name: 'Costco Anywhere Visa',
+    issuer: 'Citi',
+    colorHex: '#1d4ed8',
+    imageLabel: 'Costco Anywhere Visa',
+  },
+  {
+    id: 'amazon-store-card',
+    name: 'Amazon Store Card',
+    issuer: 'Synchrony',
+    colorHex: '#0f172a',
+    imageLabel: 'Amazon Store Card',
   },
 ];
+
+export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = RAW.map((r) => ({
+  id: r.id,
+  name: r.name,
+  issuer: r.issuer,
+  colorHex: r.colorHex,
+  officialDocumentUrl: r.officialDocumentUrl,
+  imageUrl: cardImage(r.imageLabel),
+  rules: [],
+}));

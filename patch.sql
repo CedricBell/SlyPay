@@ -1,0 +1,19 @@
+-- Ce fichier n’est PAS un patch SQL valide : il contenait par erreur la sortie de npm
+-- (« Need to install prisma@6… ») au lieu du résultat de `prisma migrate diff`.
+--
+-- Générer un vrai script SQL (sans toucher à la base tout de suite) :
+--
+--   cd frontend
+--   npx prisma migrate diff \
+--     --from-url "$DATABASE_URL" \
+--     --to-schema-datamodel prisma/schema.prisma \
+--     --script > ../patch.sql
+--
+-- Important : lance la commande depuis le dossier `frontend` pour utiliser Prisma 5.x
+-- du projet ; sinon `npx prisma` peut proposer d’installer Prisma 6 et afficher un prompt.
+--
+-- Comparer l’état actuel de Postgres ↔ schéma Prisma :
+-- même commande `migrate diff` ; tu lis le fichier pour voir ce qui manque ou diffère.
+--
+-- Supabase affiche « 0 migrations » pour ses migrations SQL internes ; Prisma trace les
+-- siennes dans la table Postgres `_prisma_migrations` (pas dans l’UI Supabase « migrations »).
