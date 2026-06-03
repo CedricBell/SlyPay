@@ -9,6 +9,7 @@ const mappedRuleSchema = z.object({
   multiplier: z.number().min(0).max(1000),
   earningType: z.nativeEnum(EarningType),
   notes: z.string().optional(),
+  excludedMerchants: z.array(z.string()).optional(),
 });
 
 const mappedRulesSchema = z.array(mappedRuleSchema);
@@ -17,16 +18,17 @@ const SYSTEM = `You convert credit-card reward extracts into normalized rule row
 
 Output JSON array only. Each item:
 - category: one of GROCERIES, DINING, TRAVEL, GAS, ONLINE_SHOPPING, DRUGSTORES, ENTERTAINMENT, WHOLESALE, OTHER
-- multiplier: For CASHBACK_PERCENT this is the percent per dollar (e.g. 2 means 2%). For POINTS or MILES this is points/miles per dollar on eligible spend (e.g. 3 means 3 per $1).
-- earningType: CASHBACK_PERCENT for flat cashback cards; POINTS for membership/points currencies; MILES for mileage currencies.
-- notes: optional short caveat from the extract (caps, enrollment).
+- multiplier: For CASHBACK_PERCENT this is the percent per dollar (e.g. 2 means 2%). For POINTS or MILES this is points/miles per dollar.
+- earningType: CASHBACK_PERCENT for flat cashback; POINTS for membership/points; MILES for mileage.
+- notes: short caveat (caps, enrollment) from the extract.
+- excludedMerchants: merchant/brand names excluded from THIS category earn (e.g. ["Target","Walmart"] for groceries). Copy from earnRates[].excludedMerchants and globalExcludedMerchants when relevant.
 
 Rules:
-- Prefer specifics from earnRates; map vague merchant wording to closest SpendCategory; use OTHER for generic base earn if clearly stated.
-- If multiple rates apply to the same category, keep the primary everyday rate from official terms when possible; editorial blocks may mention promos — note them in rule notes when mapping.
-- Always include an OTHER rule for the documented base/default earn when inferable; otherwise use multiplier 1 POINTS with a note that base earn was unclear.
+- Prefer specifics from earnRates; map vague merchant wording to closest SpendCategory.
+- Preserve ALL merchant exclusions per category — critical for grocery/dining rules.
+- Always include an OTHER rule for documented base/default earn when inferable.
 
-Respond with JSON: { "rules": [ ...mapped items... ] }`;
+Respond with JSON: { "rules": [ ... ] }`;
 
 export async function mapExtractToRewardRules(args: {
   productName: string;
@@ -44,11 +46,24 @@ export async function mapExtractToRewardRules(args: {
 
   const parsed: unknown = JSON.parse(raw);
   const wrapper = z.object({ rules: mappedRulesSchema }).parse(parsed);
-  return wrapper.rules.map((r, i) => ({
-    category: r.category,
-    multiplier: r.multiplier,
-    earningType: r.earningType,
-    priority: i,
-    notes: r.notes,
-  }));
+
+  const globalExclusions = args.extract.globalExcludedMerchants ?? [];
+
+  return wrapper.rules.map((r, i) => {
+    const mergedExclusions = [
+      ...new Set([
+        ...(r.excludedMerchants ?? []),
+        ...globalExclusions,
+      ]),
+    ].filter(Boolean);
+
+    return {
+      category: r.category,
+      multiplier: r.multiplier,
+      earningType: r.earningType,
+      priority: i,
+      notes: r.notes,
+      excludedMerchants: mergedExclusions.length ? mergedExclusions : undefined,
+    };
+  });
 }

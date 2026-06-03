@@ -28,6 +28,10 @@ export function classifyIntelDocumentIntent(
   }
   if (isPricing) return "pricing_legal";
 
+  if (/\/travel\b|\/home\/travel|travel-offers|amextravel\.com/i.test(blob)) {
+    return "pricing_legal";
+  }
+
   if (
     /rewards?\s*(and|&)\s*rules?|rates?\s*(and|&)\s*fees?|cardmember\s+agreement/i.test(
       blob,
@@ -89,5 +93,14 @@ export function intentScoreAdjustment(intent: IntelDocumentIntent): number {
       return -38;
     case "neutral":
       return 0;
+  }
+}
+
+export function isTravelHubDocument(url: string): boolean {
+  try {
+    const p = new URL(url).pathname.toLowerCase();
+    return /(\/travel\b|\/home\/travel|travel-offers|\/travel-)/i.test(p);
+  } catch {
+    return /travel/i.test(url);
   }
 }

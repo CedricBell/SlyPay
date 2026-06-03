@@ -1,5 +1,9 @@
 import { EarningType, OfferStackPolicy, SpendCategory } from '@prisma/client';
 import {
+  formatMerchantExclusionNote,
+  isMerchantExcluded,
+} from '@/server/merchant-exclusions';
+import {
   CardScoreDetail,
   DecisionEngineInput,
   DecisionEngineResult,
@@ -20,7 +24,8 @@ function toNumber(n: unknown): number {
   return Number(n);
 }
 
-/** Normalize rewards to a single comparable "value score" for ranking (MVP heuristic). */
+/** Reference purchase size for ranking — rewards scale linearly so winner is amount-invariant (except caps). */
+export const REFERENCE_PURCHASE_USD = 100;
 export function comparableRewardValue(
   amount: number,
   multiplier: number,
@@ -38,14 +43,42 @@ export function comparableRewardValue(
 function pickRuleForCategory(
   rules: EngineRule[],
   category: SpendCategory,
-): EngineRule | undefined {
+  merchantName?: string | null,
+): { rule: EngineRule | undefined; merchantExcluded: boolean } {
   const exact = rules.filter((r) => r.category === category);
   if (exact.length === 0) {
     const other = rules.filter((r) => r.category === SpendCategory.OTHER);
-    if (other.length === 0) return undefined;
-    return other.sort((a, b) => b.priority - a.priority)[0];
+    if (other.length === 0) return { rule: undefined, merchantExcluded: false };
+    return {
+      rule: other.sort((a, b) => b.priority - a.priority)[0],
+      merchantExcluded: false,
+    };
   }
-  return exact.sort((a, b) => b.priority - a.priority)[0];
+
+  const sorted = exact.sort((a, b) => b.priority - a.priority);
+  for (const candidate of sorted) {
+    if (
+      merchantName &&
+      isMerchantExcluded(merchantName, candidate.excludedMerchants)
+    ) {
+      continue;
+    }
+    return { rule: candidate, merchantExcluded: false };
+  }
+
+  const top = sorted[0];
+  if (
+    top &&
+    merchantName &&
+    isMerchantExcluded(merchantName, top.excludedMerchants)
+  ) {
+    const other = rules
+      .filter((r) => r.category === SpendCategory.OTHER)
+      .sort((a, b) => b.priority - a.priority)[0];
+    return { rule: other ?? top, merchantExcluded: true };
+  }
+
+  return { rule: top, merchantExcluded: false };
 }
 
 function activeOffersForCategory(
@@ -117,19 +150,42 @@ export function scoreCardForCategory(
   category: SpendCategory,
   now: Date,
   usedMonth: number,
+  merchantName?: string | null,
 ): CardScoreDetail {
   const lines: string[] = [];
-  const rule = pickRuleForCategory(card.rules, category);
+  const { rule, merchantExcluded } = pickRuleForCategory(
+    card.rules,
+    category,
+    merchantName,
+  );
   const baseMult = rule ? toNumber(rule.multiplier) : DEFAULT_MULTIPLIER;
   const earningType = rule?.earningType ?? EarningType.POINTS;
+
+  if (merchantExcluded && merchantName) {
+    lines.push(
+      formatMerchantExclusionNote(
+        merchantName,
+        category.replace(/_/g, ' ').toLowerCase(),
+      ),
+    );
+  }
 
   if (!rule) {
     lines.push(
       `No rule for ${category}; using ${DEFAULT_MULTIPLIER}x ${earningType} (default).`,
     );
-  } else {
+  } else if (!merchantExcluded) {
     lines.push(
       `Base rule: ${category} at ${baseMult}x (${earningType.replace(/_/g, ' ').toLowerCase()}).`,
+    );
+    if (rule.excludedMerchants?.length) {
+      lines.push(
+        `Excludes: ${rule.excludedMerchants.slice(0, 4).join(', ')}${rule.excludedMerchants.length > 4 ? '…' : ''}.`,
+      );
+    }
+  } else {
+    lines.push(
+      `Fallback rule: ${rule.category} at ${baseMult}x (${earningType.replace(/_/g, ' ').toLowerCase()}).`,
     );
   }
 
@@ -140,7 +196,7 @@ export function scoreCardForCategory(
     baseMult,
     earningType,
     card.offers,
-    category,
+    merchantExcluded ? SpendCategory.OTHER : category,
     now,
     lines,
   );
@@ -159,7 +215,7 @@ export function scoreCardForCategory(
       );
       const cappedValue = uncappedValue * Math.min(1, ratio);
       lines.push(
-        `Monthly cap applies: only $${remaining.toFixed(2)} of $${amount.toFixed(2)} earns full rate.`,
+        `Monthly cap: $${cap.toFixed(0)} on this category (${remaining.toFixed(0)} remaining this month).`,
       );
       return {
         cardId: card.id,
@@ -170,6 +226,7 @@ export function scoreCardForCategory(
         earningType: effectiveType,
         comparableValue: cappedValue,
         explanationLines: lines,
+        merchantExcluded,
       };
     }
   }
@@ -189,12 +246,14 @@ export function scoreCardForCategory(
     earningType: effectiveType,
     comparableValue,
     explanationLines: lines,
+    merchantExcluded,
   };
 }
 
 export function decideBestCard(input: DecisionEngineInput): DecisionEngineResult {
   const now = input.now ?? new Date();
   const usedMap = input.categorySpendUsedMonthByCard ?? {};
+  const merchantName = input.merchantName?.trim() || null;
 
   if (!input.cards.length) {
     return {
@@ -206,13 +265,16 @@ export function decideBestCard(input: DecisionEngineInput): DecisionEngineResult
     };
   }
 
+  const referenceAmount = input.amount ?? REFERENCE_PURCHASE_USD;
+
   const ranked = input.cards.map((c) =>
     scoreCardForCategory(
       c,
-      input.amount,
+      referenceAmount,
       input.resolvedCategory,
       now,
       usedMap[c.id] ?? 0,
+      merchantName,
     ),
   );
 

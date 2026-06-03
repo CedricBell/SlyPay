@@ -3,15 +3,26 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Sparkles, CreditCard, Plus } from "lucide-react";
+import { NearbyCheckout } from "@/components/nearby-checkout";
 import { apiFetch, ApiError } from "@/lib/api";
+import { FadeIn } from "@/components/motion";
+import { PageHeader } from "@/components/page-header";
+import { StatusMessage } from "@/components/status-message";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { SurfaceCard } from "@/components/ui/surface-card";
 
 export default function DashboardPage() {
   const router = useRouter();
   const [email, setEmail] = useState<string | null>(null);
-  const [cards, setCards] = useState<number>(0);
-  const [recentRecs, setRecentRecs] = useState<
-    Array<{ id: string; merchantName: string | null; resolvedCategory: string; createdAt: string }>
-  >([]);
+  const [cards, setCards] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -19,19 +30,8 @@ export default function DashboardPage() {
       try {
         const me = await apiFetch<{ email: string }>("/auth/me");
         setEmail(me.email);
-        const [wallet, recs] = await Promise.all([
-          apiFetch<Array<{ id: string }>>("/cards"),
-          apiFetch<
-            Array<{
-              id: string;
-              merchantName: string | null;
-              resolvedCategory: string;
-              createdAt: string;
-            }>
-          >("/recommendations?limit=5"),
-        ]);
+        const wallet = await apiFetch<Array<{ id: string }>>("/cards");
         setCards(wallet.length);
-        setRecentRecs(recs);
       } catch (e) {
         if (e instanceof ApiError && e.status === 401) {
           router.replace("/login");
@@ -43,112 +43,95 @@ export default function DashboardPage() {
   }, [router]);
 
   if (err) {
-    return <p className="text-red-600 dark:text-red-400">{err}</p>;
+    return <StatusMessage variant="error">{err}</StatusMessage>;
   }
 
+  const hasCards = cards !== null && cards > 0;
+
   return (
-    <div className="motion-enter space-y-10">
-      <div className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-violet-600 dark:text-violet-400">
-          Overview
-        </p>
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Home</h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          {email ? (
+    <FadeIn className="space-y-10">
+      <PageHeader
+        eyebrow="Overview"
+        title="Home"
+        description={
+          email ? (
             <>
-              Signed in as <span className="font-medium text-zinc-900 dark:text-zinc-100">{email}</span>
+              Signed in as{" "}
+              <span className="font-medium text-foreground">{email}</span>
             </>
           ) : (
             "Loading…"
-          )}
-        </p>
-        <p className="max-w-2xl text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
-          Use SlyPay as a decision assistant at purchase time: detect nearby
-          merchants, run a recommendation, and keep your wallet rules updated.
-        </p>
+          )
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <SurfaceCard className="p-5 transition hover:ring-violet-500/25">
+          <CardHeader className="p-0">
+            <CardDescription>Cards configured</CardDescription>
+            <CardTitle className="text-3xl tabular-nums">
+              {cards ?? "—"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 pt-4">
+            {cards === 0 ? (
+              <Button variant="gradient" size="sm" className="gap-1.5" asChild>
+                <Link href="/cards/new">
+                  <Plus className="size-4" />
+                  Add your first card
+                </Link>
+              </Button>
+            ) : hasCards ? (
+              <Button variant="link" className="h-auto p-0" asChild>
+                <Link href="/cards">My cards →</Link>
+              </Button>
+            ) : null}
+          </CardContent>
+        </SurfaceCard>
+
+        <Card className="rounded-3xl border-border/80 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-transparent p-5 shadow-md backdrop-blur-xl">
+          <CardHeader className="p-0">
+            <CardDescription>Fast recommendation</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Sparkles className="size-5 text-primary" />
+              Best card, right now
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0 pt-2">
+            <CardDescription className="text-sm leading-snug">
+              Locate a store, get the top card for that purchase — explained in
+              plain English.
+            </CardDescription>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-3xl border border-zinc-200/70 bg-[var(--surface)] p-5 shadow-md backdrop-blur-xl transition hover:border-violet-300/40 dark:border-zinc-800/80 dark:hover:border-violet-800/30">
-          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Cards configured</p>
-          <p className="mt-2 text-3xl font-semibold tabular-nums">{cards}</p>
-          <Link
-            href="/cards"
-            className="mt-4 inline-flex text-sm font-semibold text-violet-600 hover:underline dark:text-violet-400"
-          >
-            My cards →
-          </Link>
-        </div>
-        <div className="rounded-3xl border border-zinc-200/70 bg-gradient-to-br from-violet-500/10 via-blue-500/5 to-transparent p-5 shadow-md backdrop-blur-xl dark:border-zinc-800/80">
-          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Fast recommendation</p>
-          <p className="mt-2 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-            In-store nearby mode
-          </p>
-          <p className="mt-1 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-            Location + merchant matching + one-tap run when confidence is high.
-          </p>
-          <Link
-            href="/recommend"
-            className="mt-4 inline-flex text-sm font-semibold text-violet-600 hover:underline dark:text-violet-400"
-          >
-            Open now →
-          </Link>
-        </div>
-        <div className="rounded-3xl border border-zinc-200/70 bg-[var(--surface)] p-5 shadow-md backdrop-blur-xl dark:border-zinc-800/80">
-          <p className="text-sm font-medium text-zinc-500 dark:text-zinc-400">Recent runs</p>
-          <p className="mt-2 text-3xl font-semibold tabular-nums">{recentRecs.length}</p>
-          <p className="mt-1 text-xs text-zinc-500">Latest recommendation traces</p>
-        </div>
-      </div>
+      {cards === 0 ? (
+        <SurfaceCard className="flex flex-col items-start gap-4 border-amber-500/25 bg-gradient-to-br from-amber-500/10 to-card p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300">
+              <CreditCard className="size-5" strokeWidth={2} />
+            </span>
+            <div>
+              <p className="font-semibold text-foreground">
+                Add a card to get started
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                SlyPay needs at least one card in your wallet before it can
+                recommend which one to use at checkout.
+              </p>
+            </div>
+          </div>
+          <Button variant="gradient" className="shrink-0 gap-1.5" asChild>
+            <Link href="/cards/new">
+              <Plus className="size-4" />
+              Add a card
+            </Link>
+          </Button>
+        </SurfaceCard>
+      ) : null}
 
-      <div className="rounded-3xl border border-zinc-200/70 bg-[var(--surface)] p-5 shadow-md backdrop-blur-xl dark:border-zinc-800/80 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold">Last recommendations</h2>
-          <Link
-            href="/recommend"
-            className="text-sm font-semibold text-violet-600 hover:underline dark:text-violet-400"
-          >
-            New recommendation
-          </Link>
-        </div>
-        {recentRecs.length === 0 ? (
-          <p className="mt-4 text-sm text-zinc-500">
-            No recommendations yet. Run one from the Now tab.
-          </p>
-        ) : (
-          <ul className="mt-4 divide-y divide-zinc-100 dark:divide-zinc-800">
-            {recentRecs.map((r) => (
-              <li
-                key={r.id}
-                className="flex flex-col gap-1 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
-              >
-                <span className="font-medium text-zinc-900 dark:text-zinc-50">
-                  {r.merchantName ?? "Unknown merchant"}
-                </span>
-                <span className="text-zinc-500">
-                  {r.resolvedCategory.replaceAll("_", " ")} ·{" "}
-                  {new Date(r.createdAt).toLocaleDateString()}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <div className="flex flex-wrap gap-3">
-        <Link
-          href="/recommend"
-          className="rounded-2xl bg-gradient-to-r from-violet-600 to-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:brightness-110 active:scale-[0.99]"
-        >
-          Recommend now
-        </Link>
-        <Link
-          href="/cards"
-          className="rounded-2xl border border-zinc-300/80 bg-white/60 px-5 py-3 text-sm font-semibold text-zinc-900 shadow-sm transition hover:bg-white dark:border-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-50 dark:hover:bg-zinc-900"
-        >
-          My cards
-        </Link>
-      </div>
-    </div>
+      {hasCards ? <NearbyCheckout /> : null}
+    </FadeIn>
   );
 }

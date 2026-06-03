@@ -90,14 +90,26 @@ function inferFromCatalogIssuerEmbed(q: string): { issuer: string; name: string 
   return null;
 }
 
-/**
- * Best-effort split of a free-text query into issuer + product name for ad-hoc
- * catalog rows and issuer-site intel discovery.
- */
-export function inferIssuerAndProductName(query: string): {
+export type CatalogInferMethod =
+  | "prefix"
+  | "suffix"
+  | "catalog_embed"
+  | "unknown_brand"
+  | "unknown_issuer";
+
+export type InferredCardIdentity = {
   issuer: string;
   name: string;
-} | null {
+  method: CatalogInferMethod;
+};
+
+/**
+ * Best-effort split of a free-text query into issuer + product name.
+ * Stops before inventing issuers from gibberish (no unknown-brand / unknown-issuer).
+ */
+export function inferIssuerAndProductNameDetailed(
+  query: string,
+): InferredCardIdentity | null {
   const q = query.trim();
   if (q.length < 3) return null;
 
@@ -105,8 +117,14 @@ export function inferIssuerAndProductName(query: string): {
     if (rule.pattern.test(q)) {
       const rest = q.replace(rule.pattern, "").trim();
       const name = cleanCardProductName(rest.length ? rest : q);
-      if (name.length < 1) return { issuer: rule.issuer, name: cleanCardProductName(q) };
-      return { issuer: rule.issuer, name };
+      if (name.length < 1) {
+        return {
+          issuer: rule.issuer,
+          name: cleanCardProductName(q),
+          method: "prefix",
+        };
+      }
+      return { issuer: rule.issuer, name, method: "prefix" };
     }
   }
 
@@ -114,17 +132,44 @@ export function inferIssuerAndProductName(query: string): {
     if (rule.pattern.test(q)) {
       const rest = q.replace(rule.pattern, "").trim();
       const name = cleanCardProductName(rest.length ? rest : q);
-      if (name.length < 1) return { issuer: rule.issuer, name: cleanCardProductName(q) };
-      return { issuer: rule.issuer, name };
+      if (name.length < 1) {
+        return {
+          issuer: rule.issuer,
+          name: cleanCardProductName(q),
+          method: "suffix",
+        };
+      }
+      return { issuer: rule.issuer, name, method: "suffix" };
     }
   }
 
   const embedded = inferFromCatalogIssuerEmbed(q);
-  if (embedded) return embedded;
+  if (embedded) {
+    return { ...embedded, method: "catalog_embed" };
+  }
 
   const unknownBrand = inferFromUnknownBrandQuery(q);
-  if (unknownBrand) return unknownBrand;
+  if (unknownBrand) {
+    return { ...unknownBrand, method: "unknown_brand" };
+  }
 
+  return null;
+}
+
+/**
+ * Legacy helper — still used to repair placeholder issuers during intel jobs.
+ * May fall back to "Unknown issuer" when the query cannot be parsed.
+ */
+export function inferIssuerAndProductName(query: string): {
+  issuer: string;
+  name: string;
+} | null {
+  const detailed = inferIssuerAndProductNameDetailed(query);
+  if (detailed) {
+    return { issuer: detailed.issuer, name: detailed.name };
+  }
+  const q = query.trim();
+  if (q.length < 3) return null;
   return { issuer: "Unknown issuer", name: cleanCardProductName(q) };
 }
 

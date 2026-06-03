@@ -1,39 +1,30 @@
 import { EarningType, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mapExtractToRewardRules } from "@/server/card-intelligence/map-extract-to-reward-rules";
+import { applyExtractSnapshotToCatalog, applyRewardRulesToCatalogProduct } from "@/server/catalog-reward-rules";
 import { rewardsExtractSchema } from "@/server/card-intelligence/rewards-extract-schema";
 import {
   sanitizeRewardRuleDrafts,
   type RewardRuleDraft,
 } from "@/server/reward-rules-sanitize";
 
-/** Replace rules on every user card linked to this catalog slug (within `tx`). */
+/** Replace canonical reward rules on a catalog product (within `tx`). */
+export async function replaceCatalogRewardRules(
+  tx: Prisma.TransactionClient,
+  productSlug: string,
+  sanitized: RewardRuleDraft[],
+): Promise<void> {
+  await applyRewardRulesToCatalogProduct(tx, productSlug, sanitized);
+}
+
+/** @deprecated Use replaceCatalogRewardRules */
 export async function replaceLinkedCardRewardRulesForCatalogSlug(
   tx: Prisma.TransactionClient,
   productSlug: string,
   sanitized: RewardRuleDraft[],
 ): Promise<number> {
-  const cards = await tx.creditCard.findMany({
-    where: { catalogProductSlug: productSlug },
-    select: { id: true },
-  });
-  for (const c of cards) {
-    await tx.rewardRule.deleteMany({ where: { creditCardId: c.id } });
-    if (sanitized.length) {
-      await tx.rewardRule.createMany({
-        data: sanitized.map((r, i) => ({
-          creditCardId: c.id,
-          category: r.category,
-          multiplier: r.multiplier,
-          earningType: r.earningType ?? EarningType.POINTS,
-          capAmountMonthly: r.capAmountMonthly ?? null,
-          priority: r.priority ?? i,
-          notes: r.notes ?? null,
-        })),
-      });
-    }
-  }
-  return cards.length;
+  await replaceCatalogRewardRules(tx, productSlug, sanitized);
+  return tx.creditCard.count({ where: { catalogProductSlug: productSlug } });
 }
 
 export async function applyCatalogExtractProposal(proposalId: string): Promise<{
@@ -86,11 +77,16 @@ export async function applyCatalogExtractProposal(proposalId: string): Promise<{
       data: { status: "DISMISSED" },
     });
 
-    const linked = await replaceLinkedCardRewardRulesForCatalogSlug(
+    await applyExtractSnapshotToCatalog(
       tx,
       proposal.productSlug,
+      proposal.proposedPayload,
       sanitized,
     );
+
+    const linked = await tx.creditCard.count({
+      where: { catalogProductSlug: proposal.productSlug },
+    });
 
     return {
       productSlug: proposal.productSlug,

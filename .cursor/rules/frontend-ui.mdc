@@ -1,0 +1,32 @@
+---
+description: UI stack for SpendLess frontend (shadcn, Tailwind, Framer Motion)
+globs: frontend/**/*.{tsx,ts,css}
+alwaysApply: false
+---
+
+# Frontend UI (SpendLess / SlyPay)
+
+## Stack
+
+- **Components**: shadcn/ui in `@/components/ui/*` (`radix-nova` style). Prefer these over raw HTML for buttons, forms, dialogs, cards, tabs, badges, skeletons.
+- **Styling**: Tailwind v4 + semantic tokens in `src/app/globals.css` (`bg-primary`, `text-muted-foreground`, `bg-card`, etc.).
+- **Brand gradients / glass**: CSS vars `--sly-violet`, `--sly-blue`, `--sly-surface` (legacy `--surface` aliases still work).
+- **Icons**: `lucide-react`.
+- **Animations**: Framer Motion via `@/components/motion` (`FadeIn`, `Stagger`, `MotionItem`). CSS `.motion-enter` for simple cases. Always respect `prefers-reduced-motion`.
+- **Toasts**: `sonner` — `import { toast } from "sonner"`; `<Toaster />` is in the root layout.
+- **Effects**: Magic UI registry — `npx shadcn@latest add @magicui/<name>` (see `components.json`).
+
+## Rules
+
+1. Use `cn()` from `@/lib/utils` for class names.
+2. New UI primitives: add via `npx shadcn@latest add <component>` — do not copy random snippets from the web.
+3. Premium SaaS look: clear hierarchy, generous spacing, subtle borders (`ring-foreground/10`), `rounded-xl`/`rounded-3xl`, backdrop blur on elevated surfaces.
+4. Client components: `"use client"` when using hooks, Framer Motion, or Radix primitives.
+5. Do not introduce extra animation libraries (GSAP, AOS, etc.) unless explicitly requested.
+
+## Adding components
+
+```bash
+cd frontend && npx shadcn@latest add <name>
+cd frontend && npx shadcn@latest add @magicui/<name>
+```

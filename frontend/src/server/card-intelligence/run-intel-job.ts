@@ -1,25 +1,23 @@
 import { prisma } from "@/lib/prisma";
-import { replaceLinkedCardRewardRulesForCatalogSlug } from "@/server/card-intelligence/apply-catalog-proposal";
-import { sha256Hex, stableSerialize } from "@/server/canonical-hash";
+import {
+  applyCatalogRulesIfMissing,
+  applyExtractSnapshotToCatalog,
+} from "@/server/catalog-reward-rules";
 import {
   discoverOfficialPdfUrl,
   inferIntelDocumentKindFromUrl,
   type IntelDocumentKind,
 } from "@/server/card-intelligence/discover-official-pdf-url";
 import { extractRewardsFromDocumentText } from "@/server/card-intelligence/extract-rewards";
-import {
-  fetchHtmlDocument,
-  fetchPdfBuffer,
-} from "@/server/card-intelligence/fetch-document";
-import { htmlDocumentToPlainText } from "@/server/card-intelligence/html-to-intel-text";
+import { loadCatalogDocumentText } from "@/server/catalog-document";
 import { normalizeIntelDocumentFetchUrl } from "@/server/card-intelligence/intel-document-intent";
 import { buildEditorialSupplementPlainText } from "@/server/card-intelligence/fetch-editorial-supplements";
 import { recordKnownIssuerAfterPdfVerified } from "@/server/card-intelligence/known-issuer-registry";
 import { resolveIntelIssuerAndCardName } from "@/server/catalog-infer";
 import { mapExtractToRewardRules } from "@/server/card-intelligence/map-extract-to-reward-rules";
 import { rewardsExtractSchema } from "@/server/card-intelligence/rewards-extract-schema";
-import { pdfBufferToText } from "@/server/card-intelligence/pdf-text";
 import { sanitizeRewardRuleDrafts } from "@/server/reward-rules-sanitize";
+import { sha256Hex, stableSerialize } from "@/server/canonical-hash";
 
 function resolveDocumentUrl(args: {
   productSlug: string;
@@ -40,6 +38,8 @@ function resolveDocumentUrl(args: {
 export async function runCardIntelJob(params: {
   productSlug: string;
   creditCardId?: string;
+  /** Re-run LLM extraction even when a catalog snapshot already exists (e.g. admin PDF upload). */
+  forceReanalyze?: boolean;
 }) {
   const job = await prisma.cardIntelJob.create({
     data: {
@@ -60,6 +60,21 @@ export async function runCardIntelJob(params: {
     });
     if (!product) {
       throw new Error("Catalog product not found");
+    }
+
+    if (!params.forceReanalyze && product.lastExtractHash) {
+      await prisma.$transaction(async (tx) => {
+        await applyCatalogRulesIfMissing(tx, params.productSlug);
+      });
+      await prisma.cardIntelJob.update({
+        where: { id: job.id },
+        data: {
+          status: "COMPLETED",
+          finishedAt: new Date(),
+          errorMessage: null,
+        },
+      });
+      return;
     }
 
     let url = resolveDocumentUrl({
@@ -141,7 +156,16 @@ export async function runCardIntelJob(params: {
       sourceKind = await inferIntelDocumentKindFromUrl(url);
     }
 
-    if (!url) {
+    const hasUploadedBlob = await prisma.catalogDocumentBlob.findUnique({
+      where: { productSlug: product.slug },
+      select: { productSlug: true },
+    });
+
+    if (!url && hasUploadedBlob) {
+      sourceKind = "pdf";
+    }
+
+    if (!url && !hasUploadedBlob) {
       const hasBrave =
         Boolean(process.env.BRAVE_SEARCH_API_KEY?.trim()) ||
         Boolean(process.env.BRAVE_API_KEY?.trim());
@@ -149,8 +173,8 @@ export async function runCardIntelJob(params: {
         Boolean(process.env.GOOGLE_API_KEY?.trim()) &&
         Boolean(process.env.GOOGLE_CSE_ID?.trim());
       const hint = !hasBrave && !hasGoogle
-        ? "Aucune URL de document — ajoutez BRAVE_SEARCH_API_KEY (Brave Search API, quota gratuit), ou GOOGLE_API_KEY + GOOGLE_CSE_ID, ou officialDocumentUrl."
-        : "Aucune page « rewards / rules » trouvée sur le site de la banque — vérifiez banque + nom de carte, ou renseignez officialDocumentUrl (admin). Pour réactiver la recherche site: via Google/Brave : INTEL_ALLOW_ISSUER_SITE_SEARCH=1.";
+        ? "Aucune URL de document — uploadez un PDF (admin), ou ajoutez BRAVE_SEARCH_API_KEY, GOOGLE_API_KEY + GOOGLE_CSE_ID, ou officialDocumentUrl."
+        : "Aucune page « rewards / rules » trouvée — uploadez un PDF (admin), vérifiez banque + nom de carte, ou renseignez officialDocumentUrl.";
       await prisma.cardIntelJob.update({
         where: { id: job.id },
         data: {
@@ -162,25 +186,23 @@ export async function runCardIntelJob(params: {
       return;
     }
 
-    const fetchUrl = normalizeIntelDocumentFetchUrl(url);
-    const text =
-      sourceKind === "html"
-        ? htmlDocumentToPlainText(await fetchHtmlDocument(fetchUrl))
-        : await pdfBufferToText(await fetchPdfBuffer(fetchUrl));
-    if (!text?.trim()) {
-      throw new Error("Could not extract text from document");
-    }
+    const fetchUrl = url ? normalizeIntelDocumentFetchUrl(url) : null;
+    const { text, resolvedUrl } = await loadCatalogDocumentText({
+      productSlug: product.slug,
+      documentUrl: fetchUrl,
+      sourceKind,
+    });
 
     const supplemental = await buildEditorialSupplementPlainText(
       product.editorialSupplementUrls,
     );
-    let documentText = text.trim();
+    let documentText = text;
     if (supplemental) {
       documentText = `${documentText}\n\n===== SUPPLEMENTARY REFERENCE (THIRD-PARTY EDITORIAL — non-official; defer to issuer text above if anything conflicts) =====\n\n${supplemental}`;
     }
 
     const { issuerForRestOfJob } = await recordKnownIssuerAfterPdfVerified({
-      documentUrl: url,
+      documentUrl: resolvedUrl ?? url ?? product.officialDocumentUrl ?? "",
       productSlug: product.slug,
       productIssuer: issuerForJob,
       productName: cardNameForJob,
@@ -211,16 +233,20 @@ export async function runCardIntelJob(params: {
             lastFetchedAt: new Date(),
           },
         });
-        await replaceLinkedCardRewardRulesForCatalogSlug(
+        await applyExtractSnapshotToCatalog(
           tx,
           product.slug,
+          extracted,
           sanitized,
         );
       });
     } else if (product.lastExtractHash === hash) {
-      await prisma.cardCatalogProduct.update({
-        where: { slug: product.slug },
-        data: { lastFetchedAt: new Date() },
+      await prisma.$transaction(async (tx) => {
+        await tx.cardCatalogProduct.update({
+          where: { slug: product.slug },
+          data: { lastFetchedAt: new Date() },
+        });
+        await applyCatalogRulesIfMissing(tx, params.productSlug);
       });
     } else {
       await prisma.cardCatalogExtractProposal.create({

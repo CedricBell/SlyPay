@@ -8,6 +8,8 @@ export type SessionContext = {
   appUser: {
     id: string;
     email: string;
+    firstName: string | null;
+    lastName: string | null;
     role: UserRole;
     isActive: boolean;
     createdAt: Date;
@@ -41,12 +43,22 @@ export async function getSessionAppUser(): Promise<SessionContext | null> {
 
   if (!appUser.isActive) return null;
 
+  const authEmail = user.email.toLowerCase();
+  if (appUser.email !== authEmail) {
+    appUser = await prisma.user.update({
+      where: { id: user.id },
+      data: { email: authEmail },
+    });
+  }
+
   return {
     authId: user.id,
     email: appUser.email,
     appUser: {
       id: appUser.id,
       email: appUser.email,
+      firstName: appUser.firstName,
+      lastName: appUser.lastName,
       role: appUser.role,
       isActive: appUser.isActive,
       createdAt: appUser.createdAt,

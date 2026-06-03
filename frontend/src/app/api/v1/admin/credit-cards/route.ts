@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/api-auth";
+import { catalogProductAdminInclude } from "@/lib/credit-card-rules";
 import { prisma } from "@/lib/prisma";
 import { dec } from "@/lib/serialize";
 import { computeWalletScore } from "@/lib/wallet-score";
@@ -17,83 +18,56 @@ export async function GET(req: NextRequest) {
   const skip = (page - 1) * take;
 
   const [rows, total] = await Promise.all([
-    prisma.creditCard.findMany({
+    prisma.cardCatalogProduct.findMany({
       skip,
       take,
-      orderBy: { updatedAt: "desc" },
-      include: {
-        user: { select: { id: true, email: true } },
-        _count: { select: { rewardRules: true } },
-        rewardRules: {
-          orderBy: [{ priority: "asc" }, { multiplier: "desc" }],
-        },
-        offers: true,
-        catalogProduct: {
-          select: {
-            slug: true,
-            name: true,
-            officialDocumentUrl: true,
-            lastExtractHash: true,
-            lastExtractJson: true,
-            lastFetchedAt: true,
-            rotatingBonusCalendar: true,
-          },
-        },
-        intelJobs: {
-          orderBy: { createdAt: "desc" },
-          take: 1,
-          select: {
-            status: true,
-            createdAt: true,
-            finishedAt: true,
-            errorMessage: true,
-          },
-        },
-      },
+      orderBy: [{ issuer: "asc" }, { name: "asc" }],
+      include: catalogProductAdminInclude,
     }),
-    prisma.creditCard.count(),
+    prisma.cardCatalogProduct.count(),
   ]);
 
-  const items = rows.map((c) => {
-    const cat = c.catalogProduct;
-    const job = c.intelJobs[0] ?? null;
+  const items = rows.map((product) => {
+    const job = product.intelJobs[0] ?? null;
     const errSnippet = job?.errorMessage
       ? job.errorMessage.replace(/\s+/g, " ").slice(0, 120)
       : null;
     const extractJson =
-      cat?.lastExtractJson != null ? cat.lastExtractJson : null;
-    const calJson = cat?.rotatingBonusCalendar ?? null;
-    const { total: walletScore, breakdown: walletScoreBreakdown } =
-      computeWalletScore(c.rewardRules, extractJson, {
-        cardId: c.id,
-        cardName: c.name,
-        issuer: c.issuer,
-        offers: c.offers,
+      product.lastExtractJson != null ? product.lastExtractJson : null;
+    const calJson = product.rotatingBonusCalendar ?? null;
+    const { total: catalogScore, breakdown: scoreBreakdown } = computeWalletScore(
+      product.rewardRules,
+      extractJson,
+      {
+        cardId: product.slug,
+        cardName: product.name,
+        issuer: product.issuer,
+        offers: [],
         rotatingBonusCalendar: calJson,
-      });
-    const previewRules = c.rewardRules.slice(0, 10);
+      },
+    );
+    const previewRules = product.rewardRules.slice(0, 10);
     return {
-      id: c.id,
-      userId: c.userId,
-      userEmail: c.user.email,
-      name: c.name,
-      issuer: c.issuer,
-      last4: c.last4,
-      isActive: c.isActive,
-      createdAt: c.createdAt.toISOString(),
-      updatedAt: c.updatedAt.toISOString(),
-      catalogProductSlug: c.catalogProductSlug,
-      catalogProductName: cat?.name ?? null,
-      officialDocumentUrl: cat?.officialDocumentUrl ?? null,
-      hasCatalogExtract: Boolean(cat?.lastExtractHash),
-      catalogLastFetchedAt: cat?.lastFetchedAt?.toISOString() ?? null,
-      rewardRuleCount: c._count.rewardRules,
-      walletScore,
-      walletScoreBreakdown,
+      slug: product.slug,
+      name: product.name,
+      issuer: product.issuer,
+      walletInstanceCount: product._count.creditCards,
+      officialDocumentUrl: product.officialDocumentUrl,
+      hasCatalogExtract: Boolean(product.lastExtractHash),
+      catalogLastFetchedAt: product.lastFetchedAt?.toISOString() ?? null,
+      rewardRuleCount: product.rewardRules.length,
+      catalogScore,
+      scoreBreakdown,
       rulePreview: previewRules.map(
-        (r) =>
-          `${r.category} ${dec(r.multiplier)}× (${r.earningType})`,
+        (r) => `${r.category} ${dec(r.multiplier)}× (${r.earningType})`,
       ),
+      uploadedDocument: product.uploadedDocument
+        ? {
+            byteSize: product.uploadedDocument.byteSize,
+            fileName: product.uploadedDocument.fileName,
+            uploadedAt: product.uploadedDocument.uploadedAt.toISOString(),
+          }
+        : null,
       latestIntelJob: job
         ? {
             status: job.status,
@@ -102,6 +76,7 @@ export async function GET(req: NextRequest) {
             errorSnippet: errSnippet,
           }
         : null,
+      updatedAt: product.updatedAt.toISOString(),
     };
   });
 

@@ -70,3 +70,25 @@ export async function apiFetch<T>(
   }
   return text ? (JSON.parse(text) as T) : (undefined as T);
 }
+
+/** Multipart upload (do not set Content-Type — browser sets boundary). */
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+): Promise<T> {
+  const base = API_BASE.endsWith("/") ? API_BASE.slice(0, -1) : API_BASE;
+  const p = path.startsWith("/") ? path : `/${path}`;
+  const url = `${base}${p}`;
+
+  const res = await fetch(url, {
+    method: "POST",
+    body: formData,
+    credentials: "include",
+  });
+
+  const text = await res.text();
+  if (!res.ok) {
+    throw new ApiError(res.status, text);
+  }
+  return text ? (JSON.parse(text) as T) : (undefined as T);
+}

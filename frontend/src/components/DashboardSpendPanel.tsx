@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
+import { StatusMessage } from "@/components/status-message";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SurfaceCard } from "@/components/ui/surface-card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type Stats = {
   periodDays: number;
@@ -77,163 +83,123 @@ export function DashboardSpendPanel() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="inline-flex rounded-lg border border-zinc-200 bg-white p-0.5 dark:border-zinc-800 dark:bg-zinc-950">
-          {(
-            [
-              ["overview", "Overview"],
-              ["spending", "Spending"],
-              ["recommendations", "Recommendations"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                tab === id
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-900"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="spending">Spending</TabsTrigger>
+            <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div className="flex items-center gap-2 text-sm">
-          <span className="text-zinc-500">Period</span>
+          <span className="text-muted-foreground">Period</span>
           {[7, 30, 90].map((d) => (
-            <button
+            <Button
               key={d}
               type="button"
+              size="sm"
+              variant={days === d ? "default" : "outline"}
               onClick={() => setDays(d)}
-              className={`rounded-md px-2.5 py-1 font-medium ${
-                days === d
-                  ? "bg-violet-600 text-white"
-                  : "border border-zinc-200 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
-              }`}
             >
               {d}d
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
-      {err && (
-        <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
-          {err}
-        </p>
-      )}
+      {err ? <StatusMessage variant="error">{err}</StatusMessage> : null}
 
-      {loading && !stats && (
-        <p className="text-sm text-zinc-500">Loading statistics…</p>
-      )}
+      {loading && !stats && <Skeleton className="h-24 w-full" />}
 
       {stats && (
         <>
           {tab === "overview" && (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  Total spend
-                </p>
-                <p className="mt-2 text-2xl font-semibold">
-                  {fmt.format(stats.transactions.totalSpend)}
-                </p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  Last {stats.periodDays} days
-                </p>
-              </div>
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  Transactions
-                </p>
-                <p className="mt-2 text-2xl font-semibold">
-                  {stats.transactions.count}
-                </p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  Avg ticket {fmtDetail.format(stats.transactions.avgTicket)}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  Wallet
-                </p>
-                <p className="mt-2 text-2xl font-semibold">
-                  {stats.wallet.activeCards}{" "}
-                  <span className="text-base font-normal text-zinc-500">
-                    / {stats.wallet.cards} cards
-                  </span>
-                </p>
-                <p className="mt-1 text-xs text-zinc-500">Active vs total</p>
-              </div>
-              <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                  Recommendations run
-                </p>
-                <p className="mt-2 text-2xl font-semibold">
-                  {stats.recommendations.count}
-                </p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  Volume checked{" "}
-                  {fmt.format(stats.recommendations.totalAmountConsidered)}
-                </p>
-              </div>
+              {[
+                {
+                  label: "Total spend",
+                  value: fmt.format(stats.transactions.totalSpend),
+                  hint: `Last ${stats.periodDays} days`,
+                },
+                {
+                  label: "Transactions",
+                  value: String(stats.transactions.count),
+                  hint: `Avg ticket ${fmtDetail.format(stats.transactions.avgTicket)}`,
+                },
+                {
+                  label: "Wallet",
+                  value: `${stats.wallet.activeCards} / ${stats.wallet.cards}`,
+                  hint: "Active vs total cards",
+                },
+                {
+                  label: "Recommendations run",
+                  value: String(stats.recommendations.count),
+                  hint: `Volume checked ${fmt.format(stats.recommendations.totalAmountConsidered)}`,
+                },
+              ].map((stat) => (
+                <SurfaceCard key={stat.label} className="p-5">
+                  <CardHeader className="p-0">
+                    <CardDescription className="text-xs uppercase tracking-wide">
+                      {stat.label}
+                    </CardDescription>
+                    <CardTitle className="text-2xl tabular-nums">
+                      {stat.value}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-0 pt-2">
+                    <CardDescription className="text-xs">{stat.hint}</CardDescription>
+                  </CardContent>
+                </SurfaceCard>
+              ))}
             </div>
           )}
 
           {tab === "overview" && stats.transactions.count === 0 && (
-            <div className="rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-950">
-              <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
+            <SurfaceCard className="border-dashed p-8 text-center">
+              <p className="text-sm font-medium text-foreground dark:text-foreground">
                 No transactions in this period yet
               </p>
-              <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              <p className="mt-2 text-sm text-muted-foreground dark:text-muted-foreground">
                 Log purchases via the API or use recommendations to model spend.
                 The dashboard becomes much richer once transactions exist.
               </p>
               <div className="mt-4 flex flex-wrap justify-center gap-3">
-                <Link
-                  href="/recommend"
-                  className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700"
-                >
-                  Run a recommendation
-                </Link>
-                <Link
-                  href="/cards"
-                  className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-600 dark:text-zinc-100 dark:hover:bg-zinc-900"
-                >
-                  Manage cards
-                </Link>
+                <Button variant="gradient" asChild>
+                  <Link href="/dashboard#nearby">Run a recommendation</Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href="/cards">Manage cards</Link>
+                </Button>
               </div>
-            </div>
+            </SurfaceCard>
           )}
 
           {tab === "spending" && (
             <div className="grid gap-6 lg:grid-cols-2">
-              <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              <SurfaceCard className="p-5">
+                <h2 className="text-sm font-semibold text-foreground dark:text-foreground">
                   Spend by category
                 </h2>
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-xs text-muted-foreground">
                   From recorded transactions (category on each row).
                 </p>
                 <ul className="mt-4 space-y-3">
                   {stats.spendByCategory.length === 0 ? (
-                    <li className="text-sm text-zinc-500">No data</li>
+                    <li className="text-sm text-muted-foreground">No data</li>
                   ) : (
                     stats.spendByCategory.map((row) => (
                       <li key={row.category}>
                         <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium text-zinc-800 dark:text-zinc-100">
+                          <span className="font-medium text-foreground dark:text-foreground">
                             {row.category.replaceAll("_", " ")}
                           </span>
-                          <span className="text-zinc-600 dark:text-zinc-300">
+                          <span className="text-muted-foreground dark:text-muted-foreground">
                             {fmt.format(row.amount)}{" "}
-                            <span className="text-xs text-zinc-400">
+                            <span className="text-xs text-muted-foreground">
                               ({row.count})
                             </span>
                           </span>
                         </div>
-                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted/50">
                           <div
                             className="h-full rounded-full bg-violet-500"
                             style={{
@@ -245,30 +211,30 @@ export function DashboardSpendPanel() {
                     ))
                   )}
                 </ul>
-              </section>
+              </SurfaceCard>
 
-              <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              <SurfaceCard className="p-5">
+                <h2 className="text-sm font-semibold text-foreground dark:text-foreground">
                   Top merchants
                 </h2>
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Aggregated from transactions linked to merchants (or notes).
                 </p>
-                <ul className="mt-4 divide-y divide-zinc-100 dark:divide-zinc-800">
+                <ul className="mt-4 divide-y divide-border">
                   {stats.topMerchants.length === 0 ? (
-                    <li className="py-3 text-sm text-zinc-500">No data</li>
+                    <li className="py-3 text-sm text-muted-foreground">No data</li>
                   ) : (
                     stats.topMerchants.map((m, idx) => (
                       <li
                         key={`${m.label}-${idx}`}
                         className="flex items-center justify-between py-2.5 text-sm"
                       >
-                        <span className="font-medium text-zinc-800 dark:text-zinc-100">
+                        <span className="font-medium text-foreground dark:text-foreground">
                           {m.label}
                         </span>
-                        <span className="text-zinc-600 dark:text-zinc-300">
+                        <span className="text-muted-foreground dark:text-muted-foreground">
                           {fmt.format(m.amount)}
-                          <span className="ml-2 text-xs text-zinc-400">
+                          <span className="ml-2 text-xs text-muted-foreground">
                             {m.count}×
                           </span>
                         </span>
@@ -276,19 +242,19 @@ export function DashboardSpendPanel() {
                     ))
                   )}
                 </ul>
-              </section>
+              </SurfaceCard>
 
-              <section className="rounded-2xl border border-zinc-200 bg-white p-5 lg:col-span-2 dark:border-zinc-800 dark:bg-zinc-950">
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              <SurfaceCard className="p-5 lg:col-span-2">
+                <h2 className="text-sm font-semibold text-foreground dark:text-foreground">
                   Daily spend
                 </h2>
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Sum of transaction amounts per day in the selected window.
                 </p>
                 {stats.spendByDay.length === 0 ? (
-                  <p className="mt-4 text-sm text-zinc-500">No data</p>
+                  <p className="mt-4 text-sm text-muted-foreground">No data</p>
                 ) : (
-                  <div className="mt-4 flex h-36 items-end gap-1 border-b border-zinc-100 pb-1 dark:border-zinc-800">
+                  <div className="mt-4 flex h-36 items-end gap-1 border-b border-border pb-1 dark:border-border">
                     {stats.spendByDay.map((d) => {
                       const barPx = maxDay
                         ? Math.max(4, Math.round((d.amount / maxDay) * 120))
@@ -303,7 +269,7 @@ export function DashboardSpendPanel() {
                             className="w-full max-w-[12px] rounded-t bg-violet-500/90 transition group-hover:bg-violet-400"
                             style={{ height: `${barPx}px` }}
                           />
-                          <span className="mt-1 hidden truncate text-[10px] text-zinc-400 sm:block">
+                          <span className="mt-1 hidden truncate text-[10px] text-muted-foreground sm:block">
                             {d.date.slice(5)}
                           </span>
                         </div>
@@ -311,53 +277,53 @@ export function DashboardSpendPanel() {
                     })}
                   </div>
                 )}
-              </section>
+              </SurfaceCard>
 
               {stats.transactions.largestPurchase.amount > 0 && (
-                <section className="rounded-2xl border border-zinc-200 bg-white p-5 lg:col-span-2 dark:border-zinc-800 dark:bg-zinc-950">
-                  <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                <SurfaceCard className="p-5 lg:col-span-2">
+                  <h2 className="text-sm font-semibold text-foreground dark:text-foreground">
                     Largest purchase
                   </h2>
                   <p className="mt-2 text-2xl font-semibold">
                     {fmtDetail.format(stats.transactions.largestPurchase.amount)}
                   </p>
                   {stats.transactions.largestPurchase.at && (
-                    <p className="mt-1 text-xs text-zinc-500">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {new Date(
                         stats.transactions.largestPurchase.at,
                       ).toLocaleString()}
                     </p>
                   )}
-                </section>
+                </SurfaceCard>
               )}
             </div>
           )}
 
           {tab === "recommendations" && (
             <div className="grid gap-6 lg:grid-cols-2">
-              <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              <SurfaceCard className="p-5">
+                <h2 className="text-sm font-semibold text-foreground dark:text-foreground">
                   Recommendations by resolved category
                 </h2>
-                <p className="mt-1 text-xs text-zinc-500">
+                <p className="mt-1 text-xs text-muted-foreground">
                   How often each spend category was resolved when you ran the
                   engine.
                 </p>
                 <ul className="mt-4 space-y-3">
                   {stats.recommendations.byCategory.length === 0 ? (
-                    <li className="text-sm text-zinc-500">No runs in this period</li>
+                    <li className="text-sm text-muted-foreground">No runs in this period</li>
                   ) : (
                     stats.recommendations.byCategory.map((row) => (
                       <li key={row.category}>
                         <div className="flex items-center justify-between text-sm">
-                          <span className="font-medium text-zinc-800 dark:text-zinc-100">
+                          <span className="font-medium text-foreground dark:text-foreground">
                             {row.category.replaceAll("_", " ")}
                           </span>
-                          <span className="text-zinc-600 dark:text-zinc-300">
+                          <span className="text-muted-foreground dark:text-muted-foreground">
                             {row.count} runs
                           </span>
                         </div>
-                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                        <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted/50">
                           <div
                             className="h-full rounded-full bg-blue-500"
                             style={{
@@ -369,12 +335,12 @@ export function DashboardSpendPanel() {
                     ))
                   )}
                 </ul>
-              </section>
-              <section className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-950">
-                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              </SurfaceCard>
+              <SurfaceCard className="p-5">
+                <h2 className="text-sm font-semibold text-foreground dark:text-foreground">
                   How to use this for optimization
                 </h2>
-                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-zinc-600 dark:text-zinc-400">
+                <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-muted-foreground dark:text-muted-foreground">
                   <li>
                     Compare <strong>spend by category</strong> (transactions) with{" "}
                     <strong>where the engine thinks you shop</strong> (recommendation
@@ -390,7 +356,7 @@ export function DashboardSpendPanel() {
                   <li>
                     Run{" "}
                     <Link
-                      href="/recommend"
+                      href="/dashboard#nearby"
                       className="font-medium text-violet-600"
                     >
                       Recommendations
@@ -398,7 +364,7 @@ export function DashboardSpendPanel() {
                     before big purchases to pick the best card for that category.
                   </li>
                 </ul>
-              </section>
+              </SurfaceCard>
             </div>
           )}
         </>

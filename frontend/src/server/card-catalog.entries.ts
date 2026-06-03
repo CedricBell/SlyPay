@@ -9,9 +9,68 @@ function cardImage(label: string): string {
   return `https://placehold.co/320x200/111827/F9FAFB/png?text=${encodeURIComponent(label)}`;
 }
 
+/**
+ * Curated issuer-hosted card art (official marketing assets).
+ * Falls back to placeholder when not listed.
+ */
+const CURATED_IMAGE_URLS: Record<string, string> = {
+  "chase-sapphire-preferred":
+    "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-sapphire-preferred/card-sapphire-preferred.png",
+  "chase-sapphire-reserve":
+    "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-sapphire-reserve/card-sapphire-reserve.png",
+  "chase-freedom-unlimited":
+    "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-freedom-unlimited/card-freedom-unlimited.png",
+  "chase-freedom-flex":
+    "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-freedom-flex/card-freedom-flex.png",
+  "amex-gold":
+    "https://www.americanexpress.com/content/dam/amex/us/en/credit-cards/card-art/consumer/gold-card/gold-card-480x304.png",
+  "amex-platinum":
+    "https://www.americanexpress.com/content/dam/amex/us/en/credit-cards/card-art/consumer/platinum-card/platinum-card-480x304.png",
+  "amex-blue-cash-preferred":
+    "https://www.americanexpress.com/content/dam/amex/us/en/credit-cards/card-art/consumer/blue-cash-preferred/blue-cash-preferred-480x304.png",
+  "amex-blue-cash-everyday":
+    "https://www.americanexpress.com/content/dam/amex/us/en/credit-cards/card-art/consumer/blue-cash-everyday/blue-cash-everyday-480x304.png",
+  "amex-green":
+    "https://www.americanexpress.com/content/dam/amex/us/en/credit-cards/card-art/consumer/green-card/green-card-480x304.png",
+  "citi-double-cash":
+    "https://www.citi.com/CRD/images/card_art/citi-double-cash-card.png",
+  "capital-one-venture-x":
+    "https://ecm.capitalone.com/WCM/card/products/venture-x-card-art.png",
+  "discover-it":
+    "https://www.discover.com/content/dam/discover/en_us/credit-cards/card-art/discover-it-cash-back.png",
+  "apple-card":
+    "https://www.apple.com/v/apple-card/d/images/overview/apple_card__c8uwy0f3xoyq_large.png",
+  "bilt-mastercard":
+    "https://www.biltrewards.com/assets/images/card/bilt-card-front.png",
+};
+
+/** Preferred intel source pages (product / offer details — not travel hubs). */
+const CURATED_OFFICIAL_URLS: Record<string, string> = {
+  "chase-sapphire-preferred":
+    "https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred",
+  "chase-sapphire-reserve":
+    "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+  "chase-freedom-unlimited":
+    "https://creditcards.chase.com/cash-back-credit-cards/freedom/unlimited",
+  "chase-freedom-flex":
+    "https://creditcards.chase.com/cash-back-credit-cards/freedom/flex",
+  "amex-gold": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+  "amex-platinum":
+    "https://www.americanexpress.com/us/credit-cards/card/platinum-card/",
+  "amex-blue-cash-preferred":
+    "https://www.americanexpress.com/us/credit-cards/card/blue-cash-preferred/",
+  "amex-blue-cash-everyday":
+    "https://www.americanexpress.com/us/credit-cards/card/blue-cash-everyday/",
+  "amex-green": "https://www.americanexpress.com/us/credit-cards/card/green-card/",
+  "citi-double-cash": "https://www.citi.com/credit-cards/citi-double-cash-credit-card",
+  "discover-it": "https://www.discover.com/credit-cards/cash-back/it-card.html",
+  "capital-one-venture-x":
+    "https://www.capitalone.com/credit-cards/venture-x/",
+};
+
 type Raw = Pick<
   CardCatalogEntry,
-  "id" | "name" | "issuer" | "colorHex" | "officialDocumentUrl"
+  "id" | "name" | "issuer" | "colorHex" | "officialDocumentUrl" | "imageUrl"
 > & { imageLabel: string };
 
 const RAW: Raw[] = [
@@ -246,8 +305,8 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = RAW.map((r) => ({
   name: r.name,
   issuer: r.issuer,
   colorHex: r.colorHex,
-  officialDocumentUrl: r.officialDocumentUrl,
-  imageUrl: cardImage(r.imageLabel),
+  officialDocumentUrl: r.officialDocumentUrl ?? CURATED_OFFICIAL_URLS[r.id],
+  imageUrl: r.imageUrl ?? CURATED_IMAGE_URLS[r.id] ?? cardImage(r.imageLabel),
   rules: [],
   rotatingBonusCalendar: ROTATING_CALENDARS_BY_SLUG[r.id],
 }));

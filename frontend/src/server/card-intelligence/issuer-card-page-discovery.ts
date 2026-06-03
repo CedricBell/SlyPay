@@ -52,6 +52,9 @@ const REWARDS_RULES_ANCHOR = [
   /pricing\s+information/i,
 ];
 
+const TRAVEL_HUB_PATH =
+  /(\/travel\b|\/home\/travel|travel-offers|\/travel-|\/en-us\/travel|\/us\/travel)/i;
+
 const REWARDS_RULES_PATH =
   /(rewards[-_]and[-_]rules|rates[-_]and[-_]fees|pricingandterms|pricing[-_]and[-_]terms|cardmember|\/apply\/terms\/|benefits?[-_]summary|rewards?[-_]disclosure|\/dam\/pricingandterms\/|LGC\d+\.html)/i;
 
@@ -113,6 +116,7 @@ function scoreProductPageUrl(
   const pathL = (u.pathname + u.search).toLowerCase();
   if (LOGIN_PATH.test(pathL)) return -1;
   if (pathL.endsWith(".pdf")) return -1;
+  if (TRAVEL_HUB_PATH.test(pathL)) return -1;
 
   let s = scorePdfCandidate({
     url: raw,
@@ -164,6 +168,8 @@ function scoreRewardsRulesTarget(
     return -1;
   }
   if (LOGIN_PATH.test(u.pathname)) return -1;
+  const pathL = (u.pathname + u.search).toLowerCase();
+  if (TRAVEL_HUB_PATH.test(pathL)) return -1;
 
   let s =
     scorePdfCandidate({
@@ -184,6 +190,9 @@ function scoreRewardsRulesTarget(
     s += 130;
   } else if (intent === "pricing_legal") {
     s -= 65;
+  }
+  if (TRAVEL_HUB_PATH.test(pathL)) {
+    s -= 150;
   }
   if (/#offerpop/i.test(raw)) {
     s += 85;

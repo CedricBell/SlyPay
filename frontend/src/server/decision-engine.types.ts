@@ -17,6 +17,7 @@ export type EngineRule = {
   earningType: EarningType;
   capAmountMonthly: number | null;
   priority: number;
+  excludedMerchants?: string[];
 };
 
 export type EngineCard = {
@@ -28,9 +29,12 @@ export type EngineCard = {
 };
 
 export type DecisionEngineInput = {
-  amount: number;
+  /** Defaults to REFERENCE_PURCHASE_USD — ranking is %-based. */
+  amount?: number;
   resolvedCategory: SpendCategory;
   cards: EngineCard[];
+  /** Merchant name for exclusion-aware category rule selection. */
+  merchantName?: string | null;
   /** Optional: amount already counted toward monthly cap for this card+category */
   categorySpendUsedMonthByCard?: Record<string, number>;
   now?: Date;
@@ -45,6 +49,7 @@ export type CardScoreDetail = {
   earningType: EarningType;
   comparableValue: number;
   explanationLines: string[];
+  merchantExcluded?: boolean;
 };
 
 export type DecisionEngineResult = {

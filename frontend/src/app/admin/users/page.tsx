@@ -2,6 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
+import { PageHeader } from "@/components/page-header";
+import { StatusMessage } from "@/components/status-message";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SurfaceCard } from "@/components/ui/surface-card";
 
 type Row = {
   id: string;
@@ -66,20 +72,21 @@ export default function AdminUsersPage() {
   };
 
   if (!data && !err) {
-    return <p className="text-sm text-zinc-500">Chargement…</p>;
+    return <Skeleton className="h-8 w-48" />;
   }
 
   return (
     <div className="space-y-4">
-      {err && (
-        <pre className="overflow-x-auto rounded-lg bg-red-50 p-3 text-xs text-red-800 dark:bg-red-950/40 dark:text-red-200">
-          {err}
-        </pre>
-      )}
+      <PageHeader title="Utilisateurs" />
+      {err ? (
+        <StatusMessage variant="error">
+          <pre className="overflow-x-auto text-xs">{err}</pre>
+        </StatusMessage>
+      ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+      <SurfaceCard className="overflow-x-auto p-0">
         <table className="w-full min-w-[640px] text-left text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900/50">
+          <thead className="border-b border-border bg-muted/50">
             <tr>
               <th className="px-3 py-2 font-medium">Email</th>
               <th className="px-3 py-2 font-medium">Rôle</th>
@@ -91,63 +98,68 @@ export default function AdminUsersPage() {
           </thead>
           <tbody>
             {data?.items.map((u) => (
-              <tr
-                key={u.id}
-                className="border-b border-zinc-100 dark:border-zinc-800"
-              >
+              <tr key={u.id} className="border-b border-border/60">
                 <td className="px-3 py-2 font-mono text-xs">{u.email}</td>
-                <td className="px-3 py-2">{u.role}</td>
+                <td className="px-3 py-2">
+                  <Badge variant={u.role === "ADMIN" ? "default" : "secondary"}>
+                    {u.role}
+                  </Badge>
+                </td>
                 <td className="px-3 py-2">
                   {u.isActive ? (
-                    <span className="text-violet-600">oui</span>
+                    <span className="text-primary">oui</span>
                   ) : (
-                    <span className="text-red-600">non</span>
+                    <span className="text-destructive">non</span>
                   )}
                 </td>
                 <td className="px-3 py-2">{u.cardCount}</td>
-                <td className="px-3 py-2 text-xs text-zinc-500">
+                <td className="px-3 py-2 text-xs text-muted-foreground">
                   {new Date(u.createdAt).toLocaleDateString()}
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-1">
                     {u.isActive ? (
-                      <button
+                      <Button
                         type="button"
+                        size="xs"
+                        variant="secondary"
                         disabled={busy === u.id}
-                        className="rounded bg-zinc-200 px-2 py-1 text-xs hover:bg-zinc-300 disabled:opacity-50 dark:bg-zinc-800 dark:hover:bg-zinc-700"
                         onClick={() => patch(u.id, { isActive: false })}
                       >
                         Désactiver
-                      </button>
+                      </Button>
                     ) : (
-                      <button
+                      <Button
                         type="button"
+                        size="xs"
                         disabled={busy === u.id}
-                        className="rounded bg-violet-600 px-2 py-1 text-xs text-white hover:bg-violet-700 disabled:opacity-50"
                         onClick={() => patch(u.id, { isActive: true })}
                       >
                         Réactiver
-                      </button>
+                      </Button>
                     )}
                     {u.role !== "ADMIN" && (
-                      <button
+                      <Button
                         type="button"
+                        size="xs"
+                        variant="outline"
                         disabled={busy === u.id}
-                        className="rounded border border-zinc-300 px-2 py-1 text-xs dark:border-zinc-600"
                         onClick={() => patch(u.id, { role: "ADMIN" })}
                       >
                         Admin
-                      </button>
+                      </Button>
                     )}
                     {u.role === "ADMIN" && u.id !== myId && (
-                      <button
+                      <Button
                         type="button"
+                        size="xs"
+                        variant="outline"
+                        className="border-amber-500/40 text-amber-900 dark:text-amber-200"
                         disabled={busy === u.id}
-                        className="rounded border border-amber-300 px-2 py-1 text-xs text-amber-900 dark:border-amber-800 dark:text-amber-200"
                         onClick={() => patch(u.id, { role: "USER" })}
                       >
                         Retirer admin
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </td>
@@ -155,29 +167,31 @@ export default function AdminUsersPage() {
             ))}
           </tbody>
         </table>
-      </div>
+      </SurfaceCard>
 
       {data && data.pages > 1 && (
         <div className="flex items-center gap-2 text-sm">
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             disabled={page <= 1}
-            className="rounded border border-zinc-300 px-3 py-1 disabled:opacity-40 dark:border-zinc-700"
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
             Précédent
-          </button>
+          </Button>
           <span>
             Page {data.page} / {data.pages}
           </span>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             disabled={page >= data.pages}
-            className="rounded border border-zinc-300 px-3 py-1 disabled:opacity-40 dark:border-zinc-700"
             onClick={() => setPage((p) => p + 1)}
           >
             Suivant
-          </button>
+          </Button>
         </div>
       )}
     </div>

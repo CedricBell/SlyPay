@@ -1,17 +1,82 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
   CardCatalogSuggest,
   type CatalogTemplate,
 } from "@/components/CardCatalogSuggest";
 import { CardThumbnail } from "@/components/CardThumbnail";
 import { SelectedCatalogCard } from "@/components/SelectedCatalogCard";
+import { PageHeader } from "@/components/page-header";
+import { StatusMessage } from "@/components/status-message";
+import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { SurfaceCard } from "@/components/ui/surface-card";
 import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
+import { cn } from "@/lib/utils";
+
+function CardPreviewPanel({
+  selected,
+  pickedFromList,
+  displayName,
+  displayIssuer,
+  colorHex,
+  className,
+}: {
+  selected: CatalogTemplate | null;
+  pickedFromList: boolean;
+  displayName: string;
+  displayIssuer: string;
+  colorHex: string;
+  className?: string;
+}) {
+  if (selected && pickedFromList) {
+    return (
+      <div className={className}>
+        <SelectedCatalogCard template={selected} accentColor={colorHex} />
+      </div>
+    );
+  }
+
+  return (
+    <SurfaceCard
+      className={cn(
+        "flex flex-col items-center gap-4 p-5 text-center sm:flex-row sm:text-left lg:flex-col lg:items-center lg:text-center",
+        className,
+      )}
+    >
+      <CardThumbnail
+        name={displayName || "Your card"}
+        issuer={displayIssuer}
+        last4={null}
+        colorHex={colorHex}
+        size="lg"
+        className="shrink-0"
+      />
+      <div className="min-w-0 space-y-1">
+        <p className="truncate text-sm font-semibold tracking-tight">
+          {displayName || "Your card"}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">{displayIssuer}</p>
+        <p className="text-[11px] text-muted-foreground/80">
+          Preview updates as you type or pick a suggestion.
+        </p>
+      </div>
+    </SurfaceCard>
+  );
+}
 
 export default function NewCardPage() {
   const router = useRouter();
+  const [query, setQuery] = useState("");
+  const [resolved, setResolved] = useState<{
+    issuer: string;
+    name: string;
+    trustedIssuer: boolean;
+  } | null>(null);
   const [name, setName] = useState("");
   const [issuer, setIssuer] = useState("");
   const [colorHex, setColorHex] = useState("#0f172a");
@@ -20,16 +85,41 @@ export default function NewCardPage() {
   const [catalogSlug, setCatalogSlug] = useState<string | null>(null);
   const [intelAdHocFromName, setIntelAdHocFromName] = useState(false);
   const [selected, setSelected] = useState<CatalogTemplate | null>(null);
+  const [pickedFromList, setPickedFromList] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
 
-  const hasPipelineSelection = catalogSlug !== null || intelAdHocFromName;
+  const displayName = pickedFromList ? name : (resolved?.name ?? name) || query;
+  const displayIssuer =
+    pickedFromList ? issuer : (resolved?.issuer ?? issuer) || "Issuer";
+
+  const canSubmit =
+    query.trim().length >= 2 &&
+    (pickedFromList || resolved !== null || catalogSlug !== null);
+
+  const handleQueryChange = useCallback((q: string) => {
+    setQuery(q);
+    setPickedFromList(false);
+    setCatalogSlug(null);
+    setIntelAdHocFromName(false);
+    setSelected(null);
+  }, []);
+
+  const handleResolvedChange = useCallback(
+    (r: { issuer: string; name: string; trustedIssuer: boolean } | null) => {
+      setResolved(r);
+      if (r && !pickedFromList) {
+        setName(r.name);
+        setIssuer(r.issuer);
+      }
+    },
+    [pickedFromList],
+  );
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
-    if (!hasPipelineSelection || !name.trim() || !issuer.trim()) {
-      setErr(
-        "Pick a match from the list below (curated or Web). Name and issuer come from that choice only.",
-      );
+    if (!canSubmit) {
+      setErr("Enter at least a bank and card name (2+ characters).");
       return;
     }
     setLoading(true);
@@ -37,11 +127,16 @@ export default function NewCardPage() {
       await apiFetch("/cards", {
         method: "POST",
         body: JSON.stringify({
-          name: name.trim(),
-          issuer: issuer.trim(),
+          rawQuery: query.trim(),
+          name: (pickedFromList ? name : resolved?.name ?? name).trim(),
+          issuer: (pickedFromList ? issuer : resolved?.issuer ?? issuer).trim(),
           colorHex,
           catalogSlug: catalogSlug ?? undefined,
-          intelAdHocFromName: intelAdHocFromName || undefined,
+          intelAdHocFromName:
+            intelAdHocFromName ||
+            (!catalogSlug && (resolved?.trustedIssuer ?? false))
+              ? true
+              : undefined,
           rules: [],
         }),
       });
@@ -55,7 +150,9 @@ export default function NewCardPage() {
   };
 
   const applyCatalog = (t: CatalogTemplate) => {
+    setPickedFromList(true);
     setSelected(t);
+    setQuery(`${t.issuer} — ${t.name}`);
     if (t.intelAdHocFromName) {
       setIntelAdHocFromName(true);
       setCatalogSlug(null);
@@ -68,64 +165,89 @@ export default function NewCardPage() {
     if (t.colorHex) setColorHex(t.colorHex);
   };
 
+  const actionButtons = (
+    <>
+      <Button
+        type="submit"
+        variant="gradient"
+        size="xl"
+        disabled={loading || !canSubmit}
+        className="min-w-[9rem] flex-1 sm:flex-none"
+      >
+        {loading ? "Saving…" : "Save card"}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="lg"
+        asChild
+        className="flex-1 sm:flex-none"
+      >
+        <Link href="/cards">Cancel</Link>
+      </Button>
+    </>
+  );
+
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Add card</h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
-          Search your bank and card in one field. We pull rewards from the
-          issuer&apos;s official site after you save.
-        </p>
+    <div className="mx-auto max-w-3xl space-y-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button variant="outline" size="sm" asChild>
+          <Link href="/cards">← Back to wallet</Link>
+        </Button>
       </div>
 
-      <form onSubmit={submit} className="space-y-5">
-        <CardCatalogSuggest onApply={applyCatalog} />
+      <PageHeader
+        title="Add card"
+        description="Type any bank and card name. We match your bank against trusted issuers and pull rewards when possible."
+      />
 
-        {!hasPipelineSelection && (
-          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-100">
-            Select a suggestion (catalogue or{" "}
-            <span className="font-semibold">Issuer site</span>) to continue.
-            Reward rules are extracted automatically — not entered by hand.
-          </p>
-        )}
-
-        {selected && hasPipelineSelection ? (
-          <SelectedCatalogCard template={selected} accentColor={colorHex} />
-        ) : (
-          <div className="flex justify-center rounded-2xl border border-dashed border-zinc-300/80 bg-zinc-50/80 py-10 dark:border-zinc-700 dark:bg-zinc-950/40">
-            <CardThumbnail
-              name={name || "Your card"}
-              issuer={issuer || "Issuer"}
-              last4={null}
-              colorHex={colorHex}
-              size="lg"
+      <form onSubmit={submit} className="space-y-5 pb-24 md:pb-0">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start lg:gap-6">
+          <div className="min-w-0 space-y-5">
+            <CardCatalogSuggest
+              onApply={applyCatalog}
+              onQueryChange={handleQueryChange}
+              onResolvedChange={handleResolvedChange}
+              onOpenChange={setSuggestionsOpen}
             />
-          </div>
-        )}
 
-        <div className="rounded-xl border border-zinc-200/80 bg-[var(--surface)] p-4 dark:border-zinc-800">
-          <label className="mb-2 block text-sm font-medium">Accent color</label>
-          <input
-            type="color"
-            className="h-10 w-full max-w-xs cursor-pointer rounded-lg border border-zinc-300 bg-white dark:border-zinc-700"
-            value={colorHex}
-            onChange={(e) => setColorHex(e.target.value)}
+            <SurfaceCard className="p-4">
+              <Field label="Accent color">
+                <Input
+                  type="color"
+                  className="h-10 max-w-xs cursor-pointer p-1"
+                  value={colorHex}
+                  onChange={(e) => setColorHex(e.target.value)}
+                />
+              </Field>
+            </SurfaceCard>
+
+            {err ? <StatusMessage variant="error">{err}</StatusMessage> : null}
+
+            <div className="hidden flex-wrap gap-3 md:flex">{actionButtons}</div>
+          </div>
+
+          <CardPreviewPanel
+            selected={selected}
+            pickedFromList={pickedFromList}
+            displayName={displayName}
+            displayIssuer={displayIssuer}
+            colorHex={colorHex}
+            className={cn(
+              "lg:sticky lg:top-24",
+              suggestionsOpen && "hidden lg:block",
+            )}
           />
         </div>
 
-        {err && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-100">
-            {err}
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={loading || !hasPipelineSelection}
-          className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-md transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+        <div
+          className={cn(
+            "fixed inset-x-0 z-40 border-t border-border/80 bg-background/90 px-4 py-3 backdrop-blur-xl",
+            "bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))] md:hidden",
+          )}
         >
-          {loading ? "Saving…" : "Save card"}
-        </button>
+          <div className="mx-auto flex max-w-3xl gap-2">{actionButtons}</div>
+        </div>
       </form>
     </div>
   );

@@ -8,14 +8,36 @@ function normalizeSearch(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function pickMerchantCategory(
+  mappings: Array<{ category: SpendCategory; confidence: { toString(): string } }>,
+): SpendCategory | null {
+  if (mappings.length === 0) return null;
+  const sorted = [...mappings].sort(
+    (a, b) => Number(b.confidence) - Number(a.confidence),
+  );
+  return sorted[0]?.category ?? null;
+}
+
+function categoriesConflict(
+  placeHint: SpendCategory | null | undefined,
+  merchantHint: SpendCategory | null | undefined,
+): boolean {
+  if (!placeHint || !merchantHint) return false;
+  return placeHint !== merchantHint;
+}
+
 type NearbyRow = {
   name: string;
+  lat: number;
+  lng: number;
   distanceMeters: number;
   source: "osm" | "google";
 };
 
-type NearbyMatch = {
+export type NearbyMatch = {
   detectedName: string;
+  lat: number;
+  lng: number;
   distanceMeters: number;
   source: "osm" | "google";
   merchant: {
@@ -25,7 +47,6 @@ type NearbyMatch = {
     categoryHint: SpendCategory | null;
   } | null;
   confidence: number;
-  /** When no DB merchant match — OSM/Google-derived spend category */
   suggestedCategoryHint: SpendCategory | null;
 };
 
@@ -44,6 +65,8 @@ export async function GET(req: NextRequest) {
   const { places, sources } = await loadNearbyPlaces(lat, lng);
   if (places.length === 0) {
     return NextResponse.json({
+      userLat: lat,
+      userLng: lng,
       nearby: [],
       matches: [],
       sources,
@@ -52,6 +75,8 @@ export async function GET(req: NextRequest) {
 
   const nearby: NearbyRow[] = places.map((p) => ({
     name: p.name,
+    lat: p.lat,
+    lng: p.lng,
     distanceMeters: p.distanceMeters,
     source: p.source,
   }));
@@ -74,6 +99,7 @@ export async function GET(req: NextRequest) {
   const matches: NearbyMatch[] = [];
   for (const p of places) {
     const n = normalizeSearch(p.name);
+    const placeHint = p.suggestedCategoryHint;
     const best = dbMerchants
       .map((m) => {
         const dn = normalizeSearch(m.displayName);
@@ -87,34 +113,49 @@ export async function GET(req: NextRequest) {
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)[0];
 
-    if (!best) {
+    const merchantCategoryHint = best
+      ? pickMerchantCategory(best.merchant.categoryMappings)
+      : null;
+
+    const rejectFuzzyMatch =
+      best &&
+      best.score < 100 &&
+      categoriesConflict(placeHint, merchantCategoryHint);
+
+    if (!best || rejectFuzzyMatch) {
       matches.push({
         detectedName: p.name,
+        lat: p.lat,
+        lng: p.lng,
         distanceMeters: p.distanceMeters,
         source: p.source,
         merchant: null,
         confidence: 0,
-        suggestedCategoryHint: p.suggestedCategoryHint,
+        suggestedCategoryHint: placeHint,
       });
       continue;
     }
 
     matches.push({
       detectedName: p.name,
+      lat: p.lat,
+      lng: p.lng,
       distanceMeters: p.distanceMeters,
       source: p.source,
       merchant: {
         id: best.merchant.id,
         displayName: best.merchant.displayName,
         mcc: best.merchant.mcc,
-        categoryHint: best.merchant.categoryMappings[0]?.category ?? null,
+        categoryHint: merchantCategoryHint,
       },
       confidence: best.score,
-      suggestedCategoryHint: null,
+      suggestedCategoryHint: placeHint,
     });
   }
 
   return NextResponse.json({
+    userLat: lat,
+    userLng: lng,
     nearby,
     matches,
     sources,

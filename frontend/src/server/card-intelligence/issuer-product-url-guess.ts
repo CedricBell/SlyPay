@@ -2,6 +2,15 @@ import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 import { guessIssuerApexDomainsFromDisplayName } from "@/server/card-intelligence/issuer-domain-guess";
 import { normalizeIssuer } from "@/server/card-intelligence/issuer-official-domains";
 
+/** Curated Amex marketing paths (slug tail ≠ URL path). */
+const AMEX_CARD_PATHS: Record<string, string> = {
+  gold: "gold-card",
+  platinum: "platinum-card",
+  green: "green-card",
+  "blue-cash-preferred": "blue-cash-preferred",
+  "blue-cash-everyday": "blue-cash-everyday",
+};
+
 function slugTailAfterIssuerPrefix(productSlug: string, issuer: string): string | null {
   if (productSlug.startsWith("adhoc-")) return null;
   const parts = productSlug.split("-").filter((p) => p.length > 0);
@@ -79,6 +88,21 @@ function guessGenericProductPageUrls(
   return [...new Set(urls)];
 }
 
+function amexCardPath(productSlug: string, tail: string): string {
+  const entry = CARD_CATALOG_ENTRIES.find((e) => e.id === productSlug);
+  if (entry?.officialDocumentUrl) {
+    try {
+      const u = new URL(entry.officialDocumentUrl);
+      const m = u.pathname.match(/\/card\/([^/]+)/i);
+      if (m?.[1]) return m[1];
+    } catch {
+      /* */
+    }
+  }
+  const tailKey = tail.replace(/\//g, "-");
+  return AMEX_CARD_PATHS[tailKey] ?? tailKey;
+}
+
 /**
  * Direct product-page URLs (e.g. Chase Sapphire on creditcards.chase.com).
  */
@@ -90,6 +114,11 @@ export function guessIssuerProductPageUrls(
   const tail = slugTailAfterIssuerPrefix(productSlug, issuer);
   const key = normalizeIssuer(issuer);
   const urls: string[] = [];
+
+  const entry = CARD_CATALOG_ENTRIES.find((e) => e.id === productSlug);
+  if (entry?.officialDocumentUrl) {
+    urls.push(entry.officialDocumentUrl);
+  }
 
   if (!tail) {
     if (cardName?.trim()) {
@@ -104,13 +133,20 @@ export function guessIssuerProductPageUrls(
       `https://creditcards.chase.com/cash-back-credit-cards/${tail}`,
       `https://creditcards.chase.com/aeroplan-credit-cards/${tail}`,
     );
+    if (tail.includes("sapphire")) {
+      urls.push(
+        `https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred`,
+        `https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve`,
+      );
+    }
   }
 
   if (key.includes("american express") || key === "amex") {
-    const slugPath = tail.replace(/\//g, "-");
+    const cardPath = amexCardPath(productSlug, tail);
     urls.push(
-      `https://www.americanexpress.com/en-us/credit-cards/card/${slugPath}/`,
-      `https://www.americanexpress.com/us/credit-cards/card/${slugPath}/`,
+      `https://www.americanexpress.com/us/credit-cards/card/${cardPath}/`,
+      `https://www.americanexpress.com/en-us/credit-cards/card/${cardPath}/`,
+      `https://www.americanexpress.com/us/credit-cards/card/${cardPath}/apply/terms/`,
     );
   }
 

@@ -7,6 +7,7 @@ export type RewardRuleDraft = {
   capAmountMonthly?: number;
   priority?: number;
   notes?: string;
+  excludedMerchants?: string[];
 };
 
 /** One rule per category — keeps highest multiplier; ensures OTHER baseline. */

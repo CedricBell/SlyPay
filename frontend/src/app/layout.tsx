@@ -1,8 +1,10 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { NavBar } from "@/components/NavBar";
+import { AppShell } from "@/components/app-shell";
 import { PwaRegister } from "@/components/PwaRegister";
+import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,8 +25,6 @@ export const metadata: Metadata = {
   description:
     "Transaction-level credit card recommendations from official-style rules, offers, and merchant context.",
   manifest: "/manifest.webmanifest",
-  // Favicon: `src/app/icon.png` + `apple-icon.png` (App Router file convention).
-  // Do not add `src/app/favicon.ico` — it overrides icon.png (often the Vercel template).
   appleWebApp: {
     capable: true,
     title: "SlyPay",
@@ -38,15 +38,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} page-sheen min-h-screen bg-zinc-50 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-50`}
+        className={`${geistSans.variable} ${geistMono.variable} min-h-dvh font-sans text-foreground antialiased`}
       >
-        <PwaRegister />
-        <NavBar />
-        <main className="relative z-[1] isolate mx-auto max-w-5xl px-4 py-8 pb-28 md:pb-10">
-          {children}
-        </main>
+        <ThemeProvider>
+          <PwaRegister />
+          <AppShell>{children}</AppShell>
+          <Toaster richColors closeButton position="top-center" />
+        </ThemeProvider>
       </body>
     </html>
   );

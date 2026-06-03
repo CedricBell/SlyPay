@@ -1,5 +1,7 @@
 /** Decorative card image from accent color + last4 (no external assets). */
 
+import Image from "next/image";
+
 function parseHex(hex: string): { r: number; g: number; b: number } | null {
   const n = hex.trim().replace("#", "");
   if (n.length !== 6) return null;
@@ -76,6 +78,8 @@ type Props = {
   colorHex?: string | null;
   size?: CardThumbnailSize;
   className?: string;
+  /** Official issuer card art when available from catalog. */
+  imageUrl?: string | null;
   /** Emphasize on colored backgrounds */
   highlight?: boolean;
 };
@@ -87,6 +91,7 @@ export function CardThumbnail({
   colorHex,
   size = "sm",
   className = "",
+  imageUrl,
   highlight = false,
 }: Props) {
   const base = colorHex?.trim() || "#0f172a";
@@ -94,7 +99,21 @@ export function CardThumbnail({
   const c2 = shadeHex(base, 0.45);
   const d = SIZE_DIMS[size];
   const label = (issuer || name || "").trim();
-  const showLabel = size !== "xs" && label.length > 0;
+  const showLabel = size !== "xs" && label.length > 0 && !imageUrl;
+
+  if (imageUrl?.trim()) {
+    const dimClass = d.box.replace(/rounded-\S+/g, "").trim();
+    return (
+      <Image
+        src={imageUrl}
+        alt={label || "Credit card"}
+        width={172}
+        height={108}
+        unoptimized
+        className={`object-cover shadow-lg ring-1 ring-black/10 ${d.box} ${dimClass} ${className}`}
+      />
+    );
+  }
 
   return (
     <div

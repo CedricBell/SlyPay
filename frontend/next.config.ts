@@ -24,10 +24,16 @@ const nextConfig: NextConfig = {
   ],
   images: {
     remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "placehold.co",
-      },
+      { protocol: "https", hostname: "placehold.co" },
+      { protocol: "https", hostname: "creditcards.chase.com" },
+      { protocol: "https", hostname: "www.americanexpress.com" },
+      { protocol: "https", hostname: "americanexpress.com" },
+      { protocol: "https", hostname: "www.citi.com" },
+      { protocol: "https", hostname: "ecm.capitalone.com" },
+      { protocol: "https", hostname: "www.capitalone.com" },
+      { protocol: "https", hostname: "www.discover.com" },
+      { protocol: "https", hostname: "www.apple.com" },
+      { protocol: "https", hostname: "www.biltrewards.com" },
     ],
   },
   /** Declares Turbopack-aware config so dev + warnings stay aligned with `next dev --turbopack`. */

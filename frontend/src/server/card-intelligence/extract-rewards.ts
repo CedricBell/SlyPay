@@ -4,28 +4,25 @@ import {
   type RewardsExtract,
 } from "@/server/card-intelligence/rewards-extract-schema";
 
-const SYSTEM = `You extract credit-card rewards information from the document text provided by the user.
+const SYSTEM = `You extract credit-card rewards and benefits from the document text provided by the user.
 The primary source is usually an official issuer PDF or HTML terms/benefits page (plain text extracted from HTML).
-The same payload may end with a clearly delimited block from third-party editorial sites (e.g. NerdWallet, The Points Guy) for extra context — treat that block as non-authoritative: use it only to fill gaps or clarify widely reported benefits; if it conflicts with the official portion above, follow the official text and mention the disagreement in caveats.
-Rules:
-- Base every field on the supplied documentText. If something is not stated in either portion, say so in caveats and use empty arrays where appropriate.
-- Do not invent issuer URLs, enrollment steps, or dollar amounts that are not supported by the text.
-- summary must be 2–5 factual sentences in plain language.
-- earnRates: list earning structures described (points/cashback/miles per dollar or per spend), with categoryHint mirroring document wording.
-- statementCredits: recurring statement credits / merchant credits / fee credits mentioned.
-- annualFee: if the document states an annual membership/fee (e.g. "$95 per year"), set { "amountText": "$95", "description": "Annual fee" }; omit if not stated.
-- loyaltyProgramNotes: named programs (e.g. Membership Rewards) if described.
-- caveats: ambiguities, exclusions, caps, or missing detail from the document.
+The same payload may end with a clearly delimited block from third-party editorial sites — treat that block as non-authoritative.
 
-Respond with a single JSON object matching this shape:
-{
-  "summary": string,
-  "earnRates": [{ "categoryHint": string, "multiplierDescription": string, "notes"?: string }],
-  "statementCredits": [{ "description": string, "amountText"?: string, "cadence"?: string }],
-  "annualFee"?: { "amountText"?: string, "description"?: string },
-  "loyaltyProgramNotes"?: string,
-  "caveats": string[]
-}`;
+Rules:
+- Base every field on the supplied documentText. If something is not stated, say so in caveats and use empty arrays.
+- Do not invent issuer URLs, enrollment steps, or dollar amounts unsupported by the text.
+- summary: 2–5 factual sentences on earn + headline perks.
+- benefitsSummary: 2–4 sentences on purchase/travel protections, insurance, lounge/status, and non-earn perks (e.g. phone protection, rental car coverage).
+- earnRates: each earning structure with categoryHint mirroring document wording. Put merchant exclusions (Target, Walmart, Costco, etc.) in excludedMerchants[] for that rate — NOT only in caveats.
+- statementCredits: ALL recurring credits (hotel/resort/airline/travel/dining/retail/Uber/Digital Entertainment, etc.) with amountText, cadence, merchantHint when named (e.g. Hilton, Saks, airline fee credit).
+- protections: purchase/travel/phone/extended warranty/return/fraud/rental car coverage with coverageSummary and limitsText when stated.
+- perks: lounge access, status, Global Entry/TSA PreCheck, concierge, etc.
+- welcomeOffer: signup bonus if stated.
+- annualFee / foreignTransactionFee when explicitly stated.
+- globalExcludedMerchants: merchants excluded from multiple categories if stated globally.
+- caveats: ambiguities, caps, enrollment requirements, or missing detail.
+
+Respond with JSON matching the schema (earnRates[].excludedMerchants, statementCredits[].merchantHint, protections[], perks[], welcomeOffer, benefitsSummary, globalExcludedMerchants).`;
 
 export async function extractRewardsFromDocumentText(args: {
   cardName: string;

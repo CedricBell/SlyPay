@@ -1,60 +1,32 @@
 import { EarningType, SpendCategory } from "@prisma/client";
 import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { walletCardInclude } from "@/lib/credit-card-rules";
 import { getSessionAppUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
 import { mapCreditCardJson } from "@/lib/map-credit-card";
 import { runCardIntelJob } from "@/server/card-intelligence/run-intel-job";
 import {
+  applyCatalogRulesIfMissing,
+  catalogExtractIsReady,
+} from "@/server/catalog-reward-rules";
+import {
   ensureAdHocCatalogProduct,
   resolveCatalogProductFromSlug,
 } from "@/server/catalog-db-sync";
-import { sanitizeRewardRuleDrafts } from "@/server/reward-rules-sanitize";
-
-const cardInclude = {
-  rewardRules: true,
-  offers: true,
-  catalogProduct: {
-    select: {
-      slug: true,
-      lastExtractJson: true,
-      lastExtractHash: true,
-      officialDocumentUrl: true,
-      rotatingBonusCalendar: true,
-    },
-  },
-} as const;
-
-const ruleInput = z.object({
-  category: z.nativeEnum(SpendCategory),
-  multiplier: z.number().min(0).max(1000),
-  earningType: z.nativeEnum(EarningType).optional(),
-  capAmountMonthly: z.number().min(0).optional(),
-  priority: z.number().optional(),
-  notes: z.string().optional(),
-});
+import { isAdHocCatalogIntelEligible } from "@/server/catalog-intel-eligibility";
+import { resolveUserCardInput } from "@/server/wallet-card-resolve";
 
 const createBody = z.object({
-  name: z.string().min(2).max(120),
-  issuer: z.string().min(2).max(120),
+  name: z.string().min(2).max(120).optional(),
+  issuer: z.string().min(2).max(120).optional(),
+  rawQuery: z.string().min(2).max(240).optional(),
   last4: z.string().max(4).optional(),
   colorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/).optional(),
   isActive: z.boolean().optional(),
-  rules: z.array(ruleInput).optional(),
-  /** When set, must match a catalog entry id — triggers async PDF intelligence job. */
   catalogSlug: z.string().min(2).max(120).optional(),
-  /**
-   * When true, upserts an `adhoc-*` `CardCatalogProduct` from `name` + `issuer` and runs
-   * the same PDF pipeline as curated catalog cards (Brave/Google on issuer domains).
-   */
   intelAdHocFromName: z.boolean().optional(),
 });
-
-function sanitizeRules(
-  rules: z.infer<typeof ruleInput>[] | undefined,
-): z.infer<typeof ruleInput>[] {
-  return sanitizeRewardRuleDrafts(rules ?? []) as z.infer<typeof ruleInput>[];
-}
 
 export async function GET() {
   const ctx = await getSessionAppUser();
@@ -64,7 +36,7 @@ export async function GET() {
   const rows = await prisma.creditCard.findMany({
     where: { userId: ctx.appUser.id },
     orderBy: { createdAt: "desc" },
-    include: cardInclude,
+    include: walletCardInclude,
   });
   return NextResponse.json(rows.map((c) => mapCreditCardJson(c)));
 }
@@ -83,17 +55,30 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const normalizedRules = sanitizeRules(body.rules);
+
+  let name = body.name?.trim() ?? "";
+  let issuer = body.issuer?.trim() ?? "";
+  const rawQuery = body.rawQuery?.trim() ?? "";
+
+  if (rawQuery) {
+    const resolved = resolveUserCardInput(rawQuery);
+    if (resolved) {
+      if (!name) name = resolved.name;
+      if (!issuer) issuer = resolved.issuer;
+    }
+  }
+
+  if (name.length < 2 || issuer.length < 2) {
+    return NextResponse.json(
+      { message: "Enter a bank and card name (at least 2 characters each)." },
+      { status: 400 },
+    );
+  }
 
   let catalogSlug: string | undefined;
-  if (body.intelAdHocFromName) {
-    const row = await ensureAdHocCatalogProduct({
-      name: body.name,
-      issuer: body.issuer,
-      colorHex: body.colorHex ?? null,
-    });
-    catalogSlug = row.slug;
-  } else if (body.catalogSlug) {
+  let runIntelAdHoc = body.intelAdHocFromName ?? false;
+
+  if (body.catalogSlug) {
     const row = await resolveCatalogProductFromSlug(body.catalogSlug);
     if (!row) {
       return NextResponse.json(
@@ -102,51 +87,70 @@ export async function POST(req: NextRequest) {
       );
     }
     catalogSlug = row.slug;
+  } else if (runIntelAdHoc) {
+    const lookupQuery = rawQuery || `${issuer} ${name}`.trim();
+    if (!isAdHocCatalogIntelEligible(lookupQuery)) {
+      runIntelAdHoc = false;
+    }
+    if (runIntelAdHoc) {
+      const row = await ensureAdHocCatalogProduct({
+        name,
+        issuer,
+        colorHex: body.colorHex ?? null,
+      });
+      catalogSlug = row.slug;
+    }
   }
 
   const card = await prisma.$transaction(async (tx) => {
     const c = await tx.creditCard.create({
       data: {
         userId: ctx.appUser.id,
-        name: body.name,
-        issuer: body.issuer,
+        name,
+        issuer,
         last4: body.last4,
         colorHex: body.colorHex,
         isActive: body.isActive ?? true,
         catalogProductSlug: catalogSlug,
       },
-      include: cardInclude,
+      include: walletCardInclude,
     });
-    if (normalizedRules.length) {
-      await tx.rewardRule.createMany({
-        data: normalizedRules.map((r) => ({
-          creditCardId: c.id,
-          category: r.category,
-          multiplier: r.multiplier,
-          earningType: r.earningType ?? EarningType.POINTS,
-          capAmountMonthly: r.capAmountMonthly,
-          priority: r.priority ?? 0,
-          notes: r.notes,
-        })),
-      });
+    if (catalogSlug) {
+      await applyCatalogRulesIfMissing(tx, catalogSlug);
     }
     return tx.creditCard.findFirstOrThrow({
       where: { id: c.id },
-      include: cardInclude,
+      include: walletCardInclude,
     });
   });
 
+  let catalogIntelQueued = false;
   if (catalogSlug) {
-    after(async () => {
-      await runCardIntelJob({
-        productSlug: catalogSlug,
-        creditCardId: card.id,
-      });
+    const product = await prisma.cardCatalogProduct.findUnique({
+      where: { slug: catalogSlug },
+      select: { lastExtractHash: true, lastExtractJson: true },
     });
+    catalogIntelQueued = !catalogExtractIsReady(product);
+
+    if (catalogIntelQueued) {
+      after(async () => {
+        await runCardIntelJob({
+          productSlug: catalogSlug,
+          creditCardId: card.id,
+        });
+      });
+    }
   }
 
+  const cardWithRules = catalogSlug
+    ? await prisma.creditCard.findFirstOrThrow({
+        where: { id: card.id },
+        include: walletCardInclude,
+      })
+    : card;
+
   return NextResponse.json({
-    ...mapCreditCardJson(card),
-    catalogIntelQueued: Boolean(catalogSlug),
+    ...mapCreditCardJson(cardWithRules),
+    catalogIntelQueued,
   });
 }

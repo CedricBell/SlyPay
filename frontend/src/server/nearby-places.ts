@@ -2,10 +2,13 @@ import { SpendCategory } from "@prisma/client";
 import {
   hintFromGoogleTypes,
   hintFromOsmTags,
+  resolvePlaceCategoryHint,
 } from "@/lib/place-category-hint";
 
 export type EnrichedPlace = {
   name: string;
+  lat: number;
+  lng: number;
   distanceMeters: number;
   source: "osm" | "google";
   suggestedCategoryHint: SpendCategory | null;
@@ -102,15 +105,20 @@ async function fetchOsmPlaces(
     const pLng = e.lon ?? e.center?.lon;
     if (typeof pLat !== "number" || typeof pLng !== "number") continue;
 
-    const hint = hintFromOsmTags({
-      amenity: e.tags?.amenity,
-      shop: e.tags?.shop,
-      tourism: e.tags?.tourism,
-      leisure: e.tags?.leisure,
+    const hint = resolvePlaceCategoryHint({
+      name,
+      fromTags: hintFromOsmTags({
+        amenity: e.tags?.amenity,
+        shop: e.tags?.shop,
+        tourism: e.tags?.tourism,
+        leisure: e.tags?.leisure,
+      }),
     });
 
     list.push({
       name,
+      lat: pLat,
+      lng: pLng,
       distanceMeters: distanceMeters(lat, lng, pLat, pLng),
       source: "osm",
       suggestedCategoryHint: hint,
@@ -181,9 +189,14 @@ async function fetchGoogleNearbyPlaces(
 
     out.push({
       name,
+      lat: plat,
+      lng: plng,
       distanceMeters: distanceMeters(lat, lng, plat, plng),
       source: "google",
-      suggestedCategoryHint: hintFromGoogleTypes(p.types),
+      suggestedCategoryHint: resolvePlaceCategoryHint({
+        name,
+        fromTags: hintFromGoogleTypes(p.types),
+      }),
     });
   }
 
@@ -198,6 +211,8 @@ function mergePlaces(lists: EnrichedPlace[]): EnrichedPlace[] {
     const prev = best.get(key);
     if (!prev || p.distanceMeters < prev.distanceMeters) {
       best.set(key, p);
+    } else if (prev && !prev.suggestedCategoryHint && p.suggestedCategoryHint) {
+      best.set(key, { ...prev, suggestedCategoryHint: p.suggestedCategoryHint });
     }
   }
   return [...best.values()]

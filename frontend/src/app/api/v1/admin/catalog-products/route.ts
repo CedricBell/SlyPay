@@ -14,6 +14,16 @@ export async function GET() {
       name: true,
       issuer: true,
       editorialSupplementUrls: true,
+      officialDocumentUrl: true,
+      lastExtractHash: true,
+      lastFetchedAt: true,
+      uploadedDocument: {
+        select: {
+          byteSize: true,
+          fileName: true,
+          uploadedAt: true,
+        },
+      },
     },
   });
 
@@ -23,6 +33,16 @@ export async function GET() {
       name: r.name,
       issuer: r.issuer,
       editorialSupplementUrls: parseUrlJson(r.editorialSupplementUrls),
+      officialDocumentUrl: r.officialDocumentUrl,
+      hasCatalogExtract: Boolean(r.lastExtractHash),
+      catalogLastFetchedAt: r.lastFetchedAt?.toISOString() ?? null,
+      uploadedDocument: r.uploadedDocument
+        ? {
+            byteSize: r.uploadedDocument.byteSize,
+            fileName: r.uploadedDocument.fileName,
+            uploadedAt: r.uploadedDocument.uploadedAt.toISOString(),
+          }
+        : null,
     })),
   });
 }

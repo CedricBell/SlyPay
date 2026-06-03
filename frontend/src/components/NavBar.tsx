@@ -3,15 +3,39 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { motion } from "framer-motion";
+import {
+  CreditCard,
+  Home,
+  LogOut,
+  Shield,
+  User,
+  type LucideIcon,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { createClient } from "@/lib/supabase/client";
-import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-const links = [
-  { href: "/dashboard", label: "Home", short: "Home" },
-  { href: "/recommend", label: "Now", short: "Now" },
-  { href: "/cards", label: "My cards", short: "My cards" },
+type NavLink = {
+  href: string;
+  label: string;
+  short: string;
+  icon: LucideIcon;
+  admin?: boolean;
+};
+
+const links: NavLink[] = [
+  { href: "/dashboard", label: "Home", short: "Home", icon: Home },
+  { href: "/cards", label: "My cards", short: "Cards", icon: CreditCard },
+  { href: "/account", label: "Account", short: "Account", icon: User },
 ];
+
+function isActive(pathname: string, href: string, admin?: boolean) {
+  if (admin) return pathname.startsWith("/admin");
+  return pathname === href || (href !== "/dashboard" && pathname.startsWith(href));
+}
 
 export function NavBar() {
   const pathname = usePathname();
@@ -40,6 +64,11 @@ export function NavBar() {
   }, [pathname]);
 
   const logout = async () => {
+    try {
+      await fetch("/api/v1/auth/logout", { method: "POST", credentials: "include" });
+    } catch {
+      /* continue local sign-out */
+    }
     const supabase = createClient();
     await supabase.auth.signOut();
     setAuthed(false);
@@ -49,70 +78,104 @@ export function NavBar() {
   };
 
   const isAuthPage = pathname === "/login" || pathname === "/register";
-
-  const navLinkClass = (href: string, opts?: { admin?: boolean }) => {
-    const active = opts?.admin
-      ? pathname.startsWith("/admin")
-      : pathname === href;
-    if (opts?.admin) {
-      return active
-        ? "border-amber-400/50 bg-amber-500/15 text-amber-950 dark:text-amber-50"
-        : "border-transparent text-amber-900/90 hover:border-amber-400/30 hover:bg-amber-500/10 dark:text-amber-200/90";
-    }
-    return active
-      ? "border-violet-500/40 bg-violet-500/15 text-violet-950 shadow-sm dark:border-violet-500/30 dark:bg-violet-500/10 dark:text-violet-50"
-      : "border-transparent text-zinc-600 hover:border-zinc-300/60 hover:bg-white/60 dark:text-zinc-300 dark:hover:border-zinc-600 dark:hover:bg-zinc-900/60";
-  };
+  const navItems: NavLink[] = [
+    ...links,
+    ...(isAdmin
+      ? [
+          {
+            href: "/admin/users",
+            label: "Admin",
+            short: "Admin",
+            icon: Shield,
+            admin: true,
+          } satisfies NavLink,
+        ]
+      : []),
+  ];
 
   return (
     <>
-      <header className="pointer-events-auto sticky top-0 z-50 border-b border-zinc-200/60 bg-[var(--surface)]/85 backdrop-blur-xl dark:border-zinc-800/60">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-4 py-3">
+      <header className="sticky top-0 z-50 px-4 pt-3 md:pt-4">
+        <div
+          className={cn(
+            "mx-auto flex max-w-5xl items-center justify-between gap-3 rounded-2xl border border-white/50 px-4 py-2.5",
+            "bg-white/55 shadow-[0_4px_24px_-8px_rgba(15,23,42,0.12)] backdrop-blur-2xl backdrop-saturate-150",
+            "dark:border-white/[0.08] dark:bg-[rgba(12,12,20,0.65)] dark:shadow-[0_8px_32px_-12px_rgba(0,0,0,0.5)]",
+          )}
+        >
           <Link
             href={authed ? "/dashboard" : "/"}
             aria-label="SlyPay home"
-            className="pointer-events-auto group flex shrink-0 items-center gap-2.5"
+            className="group flex shrink-0 items-center gap-2.5"
           >
-            <Image
-              src="/assets/logoSeul.png"
-              alt=""
-              width={36}
-              height={36}
-              aria-hidden
-              className="h-9 w-9 shrink-0 rounded-xl bg-white object-contain p-0.5 shadow-md ring-1 ring-zinc-200/80 transition group-hover:scale-[1.03] group-active:scale-[0.98] dark:bg-zinc-900 dark:ring-zinc-700/80"
-              priority
-            />
-            <span className="bg-gradient-to-r from-violet-700 via-blue-600 to-violet-700 bg-clip-text text-lg font-semibold tracking-tight text-transparent dark:from-violet-300 dark:via-blue-300 dark:to-violet-300 sm:text-xl">
+            <motion.div
+              whileHover={{ scale: 1.05, rotate: -3 }}
+              whileTap={{ scale: 0.96 }}
+              transition={{ type: "spring", stiffness: 400, damping: 22 }}
+            >
+              <Image
+                src="/assets/logoSeul.png"
+                alt=""
+                width={36}
+                height={36}
+                aria-hidden
+                className="size-9 rounded-xl bg-white object-contain p-0.5 shadow-md ring-1 ring-black/5 dark:bg-zinc-900 dark:ring-white/10"
+                priority
+              />
+            </motion.div>
+            <span className="bg-gradient-to-r from-violet-600 via-blue-600 to-violet-600 bg-clip-text text-lg font-bold tracking-tight text-transparent dark:from-violet-300 dark:via-blue-300 dark:to-violet-300">
               SlyPay
             </span>
           </Link>
 
           {!isAuthPage && authed && (
-            <nav className="pointer-events-auto hidden min-w-0 flex-1 items-center justify-end gap-1 md:flex">
-              {links.map((l) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  className={`pointer-events-auto rounded-xl border px-3 py-2 text-sm font-medium transition ${navLinkClass(l.href)}`}
-                >
-                  {l.label}
-                </Link>
-              ))}
-              {isAdmin && (
-                <Link
-                  href="/admin/users"
-                  className={`pointer-events-auto rounded-xl border px-3 py-2 text-sm font-medium transition ${navLinkClass("/admin", { admin: true })}`}
-                >
-                  Admin
-                </Link>
-              )}
-              <button
+            <nav className="hidden items-center gap-0.5 md:flex">
+              {navItems.map((l) => {
+                const active = isActive(pathname, l.href, l.admin);
+                const Icon = l.icon;
+                return (
+                  <Link
+                    key={l.href}
+                    href={l.href}
+                    className={cn(
+                      "relative flex items-center gap-2 rounded-xl px-3.5 py-2 text-sm font-medium transition-colors",
+                      active
+                        ? "text-primary"
+                        : "text-muted-foreground hover:text-foreground",
+                      l.admin && !active && "text-amber-800/80 dark:text-amber-200/80",
+                    )}
+                  >
+                    {active && (
+                      <motion.span
+                        layoutId="desktop-nav-pill"
+                        className={cn(
+                          "absolute inset-0 rounded-xl",
+                          l.admin
+                            ? "bg-amber-500/15 ring-1 ring-amber-500/25"
+                            : "bg-primary/12 ring-1 ring-primary/20",
+                        )}
+                        transition={{
+                          type: "spring",
+                          stiffness: 380,
+                          damping: 28,
+                        }}
+                      />
+                    )}
+                    <Icon className="relative size-4 shrink-0" strokeWidth={2.25} />
+                    <span className="relative">{l.label}</span>
+                  </Link>
+                );
+              })}
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => void logout()}
-                className="pointer-events-auto rounded-xl px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-900 dark:hover:text-white"
+                className="ml-1 text-muted-foreground hover:text-foreground"
               >
-                Log out
-              </button>
+                <LogOut className="size-4" />
+                <span className="sr-only md:not-sr-only md:ml-1.5">Log out</span>
+              </Button>
             </nav>
           )}
         </div>
@@ -120,33 +183,69 @@ export function NavBar() {
 
       {authed && !isAuthPage && (
         <nav
-          className="pointer-events-auto fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-200/70 bg-[var(--surface)]/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl dark:border-zinc-800/70 md:hidden"
+          className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-1.5rem)] max-w-md -translate-x-1/2 md:hidden"
           aria-label="Primary"
         >
-          <div className="mx-auto flex max-w-lg items-stretch justify-between gap-1">
-            {links.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                className={`pointer-events-auto flex min-h-[3rem] min-w-0 flex-1 flex-col items-center justify-center rounded-2xl border px-0.5 text-center text-[11px] font-semibold leading-tight transition active:scale-[0.97] sm:text-xs ${navLinkClass(l.href)}`}
-              >
-                {l.short}
-              </Link>
-            ))}
-            {isAdmin && (
-              <Link
-                href="/admin/users"
-                className={`pointer-events-auto flex min-h-[3rem] flex-1 flex-col items-center justify-center rounded-2xl border text-xs font-semibold transition active:scale-[0.97] ${navLinkClass("/admin", { admin: true })}`}
-              >
-                Admin
-              </Link>
+          <div
+            className={cn(
+              "flex items-stretch gap-0.5 rounded-2xl border border-white/60 p-1",
+              "bg-white/70 shadow-[0_12px_40px_-12px_rgba(15,23,42,0.25)] backdrop-blur-2xl backdrop-saturate-150",
+              "dark:border-white/[0.1] dark:bg-[rgba(12,12,20,0.82)] dark:shadow-[0_16px_48px_-12px_rgba(0,0,0,0.65)]",
             )}
+          >
+            {navItems.map((l) => {
+              const active = isActive(pathname, l.href, l.admin);
+              const Icon = l.icon;
+              return (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className={cn(
+                    "relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-semibold transition-colors",
+                    active
+                      ? "text-primary"
+                      : "text-muted-foreground",
+                    l.admin && !active && "text-amber-800/90 dark:text-amber-200/90",
+                  )}
+                >
+                  {active && (
+                    <motion.span
+                      layoutId="mobile-nav-pill"
+                      className={cn(
+                        "absolute inset-0 rounded-xl",
+                        l.admin
+                          ? "bg-amber-500/15"
+                          : "bg-primary/12",
+                      )}
+                      transition={{
+                        type: "spring",
+                        stiffness: 380,
+                        damping: 28,
+                      }}
+                    />
+                  )}
+                  <motion.span
+                    className="relative flex flex-col items-center gap-0.5"
+                    whileTap={{ scale: 0.92 }}
+                  >
+                    <Icon className="size-5" strokeWidth={active ? 2.5 : 2} />
+                    <span>{l.short}</span>
+                  </motion.span>
+                </Link>
+              );
+            })}
             <button
               type="button"
               onClick={() => void logout()}
-              className="pointer-events-auto flex min-h-[3rem] flex-1 flex-col items-center justify-center rounded-2xl border border-transparent text-xs font-semibold text-zinc-500 transition hover:bg-zinc-100 dark:hover:bg-zinc-900"
+              className="relative flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-semibold text-muted-foreground"
             >
-              Out
+              <motion.span
+                className="flex flex-col items-center gap-0.5"
+                whileTap={{ scale: 0.92 }}
+              >
+                <LogOut className="size-5" />
+                <span>Out</span>
+              </motion.span>
             </button>
           </div>
         </nav>

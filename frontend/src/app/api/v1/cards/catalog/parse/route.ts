@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionAppUser } from "@/lib/session-user";
-import { inferIssuerAndProductName } from "@/server/catalog-infer";
+import { assessCatalogQuery } from "@/server/catalog-intel-eligibility";
 import { resolveIssuerOfficialHostsWithDb } from "@/server/card-intelligence/issuer-official-hosts";
 
 export async function GET(req: NextRequest) {
@@ -15,28 +15,31 @@ export async function GET(req: NextRequest) {
       query: q,
       issuer: null,
       name: null,
+      trustedIssuer: false,
       hasOfficialSite: false,
       officialHosts: [] as string[],
     });
   }
 
-  const inferred = inferIssuerAndProductName(q);
-  if (!inferred) {
+  const assessment = assessCatalogQuery(q);
+  if (!assessment.issuer || !assessment.name) {
     return NextResponse.json({
       query: q,
       issuer: null,
       name: null,
+      trustedIssuer: false,
       hasOfficialSite: false,
-      officialHosts: [],
+      officialHosts: [] as string[],
     });
   }
 
-  const hosts = await resolveIssuerOfficialHostsWithDb(inferred.issuer);
+  const hosts = await resolveIssuerOfficialHostsWithDb(assessment.issuer);
 
   return NextResponse.json({
     query: q,
-    issuer: inferred.issuer,
-    name: inferred.name,
+    issuer: assessment.issuer,
+    name: assessment.name,
+    trustedIssuer: assessment.trustedIssuer,
     hasOfficialSite: hosts.length > 0,
     officialHosts: hosts,
   });

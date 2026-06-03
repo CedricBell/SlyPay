@@ -58,6 +58,14 @@ enum CardCatalogExtractProposalStatus {
   DISMISSED
 }
 
+enum CardBenefitKind {
+  STATEMENT_CREDIT
+  PROTECTION
+  PERK
+  WELCOME_OFFER
+  LOYALTY
+}
+
 /// Canonical issuer-document-derived rewards snapshot keyed by catalog slug (matches autocomplete ids).
 model CardCatalogProduct {
   slug                  String    @id
@@ -80,8 +88,43 @@ model CardCatalogProduct {
   proposals   CardCatalogExtractProposal[]
   intelJobs   CardIntelJob[]
   creditCards CreditCard[]
+  rewardRules RewardRule[]
+  benefits    CardCatalogBenefit[]
+  uploadedDocument CatalogDocumentBlob?
 
   @@index([issuer])
+}
+
+model CardCatalogBenefit {
+  id                 String             @id @default(cuid())
+  catalogProductSlug String
+  catalogProduct     CardCatalogProduct @relation(fields: [catalogProductSlug], references: [slug], onDelete: Cascade)
+  kind               CardBenefitKind
+  title              String
+  description        String?
+  amountText         String?
+  cadence            String?
+  merchantHint       String?
+  category           SpendCategory?
+  coverageSummary    String?
+  limitsText         String?
+  enrollmentRequired Boolean            @default(false)
+  priority           Int                @default(0)
+  createdAt          DateTime           @default(now())
+
+  @@index([catalogProductSlug, kind])
+}
+
+/// Admin-uploaded issuer PDF stored in Postgres (served via /api/v1/catalog-documents/:slug).
+model CatalogDocumentBlob {
+  productSlug String             @id
+  product     CardCatalogProduct @relation(fields: [productSlug], references: [slug], onDelete: Cascade)
+  mimeType    String             @default("application/pdf")
+  fileName    String?
+  byteSize    Int
+  data        Bytes
+  uploadedAt  DateTime           @default(now())
+  uploadedBy  String?
 }
 
 /// Émetteurs appris après un PDF officiel réussi (domaine + libellé affichage).
@@ -128,6 +171,8 @@ model CardIntelJob {
 model User {
   id        String   @id
   email     String   @unique
+  firstName String?
+  lastName  String?
   role      UserRole @default(USER)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -156,7 +201,6 @@ model CreditCard {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
-  rewardRules RewardRule[]
   offers      Offer[]
   intelJobs   CardIntelJob[]
 
@@ -165,18 +209,20 @@ model CreditCard {
 }
 
 model RewardRule {
-  id               String        @id @default(cuid())
-  creditCardId     String
-  creditCard       CreditCard    @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
-  category         SpendCategory
-  multiplier       Decimal       @db.Decimal(6, 3)
-  earningType      EarningType   @default(POINTS)
-  capAmountMonthly Decimal?      @db.Decimal(12, 2)
-  priority         Int           @default(0)
-  notes            String?
-  createdAt        DateTime      @default(now())
+  id                 String             @id @default(cuid())
+  catalogProductSlug String
+  catalogProduct     CardCatalogProduct @relation(fields: [catalogProductSlug], references: [slug], onDelete: Cascade)
+  category           SpendCategory
+  multiplier         Decimal            @db.Decimal(6, 3)
+  earningType        EarningType        @default(POINTS)
+  capAmountMonthly   Decimal?           @db.Decimal(12, 2)
+  priority           Int                @default(0)
+  notes              String?
+  /// Merchant names/brands excluded from this category earn (e.g. Target, Walmart).
+  excludedMerchants  String[]           @default([])
+  createdAt          DateTime           @default(now())
 
-  @@index([creditCardId, category])
+  @@index([catalogProductSlug, category])
 }
 
 model Offer {

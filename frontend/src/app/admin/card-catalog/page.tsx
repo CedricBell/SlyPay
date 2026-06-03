@@ -1,7 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
+import { apiFetch, apiUpload, ApiError, formatCaughtApiError } from "@/lib/api";
+import { PageHeader } from "@/components/page-header";
+import { StatusMessage } from "@/components/status-message";
+import { Button } from "@/components/ui/button";
+import { inputClassName } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SurfaceCard } from "@/components/ui/surface-card";
+import { Textarea } from "@/components/ui/textarea";
 
 type Product = {
   slug: string;
@@ -16,6 +24,14 @@ type CatalogProductRow = {
   name: string;
   issuer: string;
   editorialSupplementUrls: string[];
+  officialDocumentUrl: string | null;
+  hasCatalogExtract: boolean;
+  catalogLastFetchedAt: string | null;
+  uploadedDocument: {
+    byteSize: number;
+    fileName: string | null;
+    uploadedAt: string;
+  } | null;
 };
 
 type ProposalRow = {
@@ -38,6 +54,7 @@ export default function AdminCardCatalogPage() {
   const [catRows, setCatRows] = useState<CatalogProductRow[] | null>(null);
   const [catErr, setCatErr] = useState<string | null>(null);
   const [catBusy, setCatBusy] = useState<string | null>(null);
+  const [pdfBusy, setPdfBusy] = useState<string | null>(null);
   const [catDrafts, setCatDrafts] = useState<Record<string, string>>({});
   const [catFilter, setCatFilter] = useState("");
 
@@ -102,6 +119,25 @@ export default function AdminCardCatalogPage() {
     }
   };
 
+  const uploadPdf = async (slug: string, file: File) => {
+    setPdfBusy(slug);
+    setCatErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("document", file);
+      await apiUpload(
+        `/admin/catalog-products/${encodeURIComponent(slug)}/document`,
+        fd,
+      );
+      await loadCatalogProducts();
+    } catch (e) {
+      if (e instanceof ApiError) setCatErr(formatCaughtApiError(e));
+      else setCatErr("Upload PDF impossible");
+    } finally {
+      setPdfBusy(null);
+    }
+  };
+
   const filteredCatRows = useMemo(() => {
     if (!catRows) return [];
     const q = catFilter.trim().toLowerCase();
@@ -149,81 +185,76 @@ export default function AdminCardCatalogPage() {
   };
 
   if (!data && !err) {
-    return <p className="text-sm text-zinc-500">Chargement…</p>;
+    return <Skeleton className="h-8 w-48" />;
   }
 
   return (
     <div className="space-y-4">
+      <PageHeader title="Intel catalogue" />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-zinc-600 dark:text-zinc-400">
+        <p className="text-sm text-muted-foreground">
           Valide une extraction PDF pour figer le snapshot catalogue et mettre à jour les{" "}
-          <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs dark:bg-zinc-900">
+          <code className="rounded bg-muted/50 px-1 py-0.5 text-xs dark:bg-card">
             RewardRule
           </code>{" "}
-          de toutes les cartes utilisateur liées au même slug catalogue.
+          du produit catalogue (partagées par tous les exemplaires utilisateur).
         </p>
-        <button
-          type="button"
-          onClick={() => load()}
-          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium dark:border-zinc-600"
-        >
+        <Button type="button" variant="outline" size="sm" onClick={() => load()}>
           Rafraîchir
-        </button>
+        </Button>
       </div>
 
-      <section className="rounded-xl border border-zinc-200 bg-white/50 p-4 dark:border-zinc-800 dark:bg-zinc-950/40">
-        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-          Sources éditoriales (complément d&apos;intel)
+      <SurfaceCard className="p-4">
+        <h3 className="text-sm font-semibold text-foreground dark:text-foreground">
+          PDF officiel & sources éditoriales
         </h3>
-        <p className="mt-1 text-xs text-zinc-600 dark:text-zinc-400">
-          Une ou plusieurs URLs{" "}
-          <strong>https</strong> sur{" "}
-          <span className="font-mono">thepointsguy.com</span> ou{" "}
-          <span className="font-mono">nerdwallet.com</span> /{" "}
-          <span className="font-mono">creditcards.nerdwallet.com</span> (y compris{" "}
-          <span className="font-mono">www.</span>). Le HTML est récupéré au moment du job
-          d&apos;intel et concaténé <strong>après</strong> le document officiel pour
-          l&apos;extraction LLM — en cas de conflit, le texte officiel prime. Respectez les
-          conditions des sites tiers.
+        <p className="mt-1 text-xs text-muted-foreground dark:text-muted-foreground">
+          Uploadez le PDF rewards/terms par produit — l&apos;intel LLM démarre
+          automatiquement. Les cartes ajoutées ensuite réutilisent l&apos;extrait sans
+          relancer l&apos;analyse. Les URLs éditoriales (TPG, NerdWallet) sont optionnelles
+          et concaténées après le PDF officiel.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <input
+          <Input
             type="search"
             placeholder="Filtrer par slug, nom ou émetteur…"
             value={catFilter}
             onChange={(e) => setCatFilter(e.target.value)}
-            className="min-w-[12rem] flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+            className={`${inputClassName} min-w-48 flex-1`}
           />
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => void loadCatalogProducts()}
-            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-600"
           >
             Recharger la liste
-          </button>
+          </Button>
         </div>
-        {catErr && (
-          <pre className="mt-2 overflow-x-auto rounded-lg bg-amber-50 p-2 text-xs text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
-            {catErr}
-          </pre>
-        )}
+        {catErr ? (
+          <StatusMessage variant="warning" className="mt-2">
+            <pre className="overflow-x-auto text-xs">{catErr}</pre>
+          </StatusMessage>
+        ) : null}
         {catRows === null ? (
-          <p className="mt-3 text-sm text-zinc-500">Chargement des produits catalogue…</p>
+          <p className="mt-3 text-sm text-muted-foreground">Chargement des produits catalogue…</p>
         ) : (
-          <div className="mt-3 max-h-[28rem] overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-            <table className="w-full min-w-[42rem] border-collapse text-left text-xs">
-              <thead className="sticky top-0 bg-zinc-100 dark:bg-zinc-900">
+          <div className="mt-3 max-h-[28rem] overflow-auto rounded-lg border border-border dark:border-border">
+            <table className="w-full min-w-[56rem] border-collapse text-left text-xs">
+              <thead className="sticky top-0 bg-muted/50 dark:bg-card">
                 <tr>
-                  <th className="border-b border-zinc-200 p-2 font-semibold dark:border-zinc-800">
+                  <th className="border-b border-border p-2 font-semibold dark:border-border">
                     Slug
                   </th>
-                  <th className="border-b border-zinc-200 p-2 font-semibold dark:border-zinc-800">
+                  <th className="border-b border-border p-2 font-semibold dark:border-border">
                     Carte
                   </th>
-                  <th className="border-b border-zinc-200 p-2 font-semibold dark:border-zinc-800">
-                    URLs (une par ligne, max 6)
+                  <th className="border-b border-border p-2 font-semibold dark:border-border">
+                    PDF admin
                   </th>
-                  <th className="border-b border-zinc-200 p-2 font-semibold dark:border-zinc-800">
+                  <th className="border-b border-border p-2 font-semibold dark:border-border">
+                    URLs éditoriales
+                  </th>
+                  <th className="border-b border-border p-2 font-semibold dark:border-border">
                     {" "}
                   </th>
                 </tr>
@@ -232,35 +263,78 @@ export default function AdminCardCatalogPage() {
                 {filteredCatRows.map((r) => (
                   <tr
                     key={r.slug}
-                    className="border-b border-zinc-100 odd:bg-white even:bg-zinc-50/80 dark:border-zinc-800 dark:odd:bg-zinc-950/40 dark:even:bg-zinc-900/30"
+                    className="border-b border-border odd:bg-white even:bg-muted/40/80 dark:border-border dark:odd:bg-card/40 dark:even:bg-card/30"
                   >
-                    <td className="align-top p-2 font-mono text-[11px] text-zinc-600 dark:text-zinc-400">
+                    <td className="align-top p-2 font-mono text-[11px] text-muted-foreground dark:text-muted-foreground">
                       {r.slug}
                     </td>
-                    <td className="align-top p-2 text-zinc-800 dark:text-zinc-200">
+                    <td className="align-top p-2 text-foreground dark:text-foreground">
                       <div className="font-medium">{r.name}</div>
-                      <div className="text-zinc-500">{r.issuer}</div>
+                      <div className="text-muted-foreground">{r.issuer}</div>
+                      {r.hasCatalogExtract ? (
+                        <span className="mt-1 inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                          Extrait OK
+                        </span>
+                      ) : (
+                        <span className="mt-1 inline-block text-[10px] text-muted-foreground">
+                          Pas d&apos;extrait
+                        </span>
+                      )}
+                    </td>
+                    <td className="align-top p-2">
+                      {r.uploadedDocument ? (
+                        <p className="text-[10px] text-muted-foreground">
+                          {r.uploadedDocument.fileName ?? "PDF"} ·{" "}
+                          {Math.round(r.uploadedDocument.byteSize / 1024)} Ko
+                        </p>
+                      ) : null}
+                      {r.officialDocumentUrl ? (
+                        <a
+                          href={r.officialDocumentUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-1 inline-block text-[10px] font-medium text-violet-700 underline dark:text-violet-400"
+                        >
+                          Voir document
+                        </a>
+                      ) : null}
+                      <label className="mt-2 flex cursor-pointer flex-col gap-1">
+                        <span className="text-[10px] font-medium text-foreground">
+                          {pdfBusy === r.slug ? "Upload…" : "Choisir PDF"}
+                        </span>
+                        <input
+                          type="file"
+                          accept="application/pdf,.pdf"
+                          disabled={pdfBusy === r.slug}
+                          className="max-w-[11rem] text-[10px] file:mr-2 file:rounded file:border-0 file:bg-violet-600 file:px-2 file:py-1 file:text-[10px] file:font-medium file:text-white"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) void uploadPdf(r.slug, f);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
                     </td>
                     <td className="p-2">
-                      <textarea
+                      <Textarea
                         rows={2}
                         value={catDrafts[r.slug] ?? ""}
                         onChange={(e) =>
                           setCatDrafts((m) => ({ ...m, [r.slug]: e.target.value }))
                         }
-                        className="w-full resize-y rounded border border-zinc-200 bg-white p-2 font-mono text-[11px] text-zinc-900 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                        className="font-mono text-[11px]"
                         placeholder="https://www.nerdwallet.com/..."
                       />
                     </td>
                     <td className="align-top p-2">
-                      <button
+                      <Button
                         type="button"
+                        size="sm"
                         disabled={catBusy === r.slug}
                         onClick={() => void saveEditorial(r.slug)}
-                        className="rounded-lg bg-zinc-800 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-200 dark:text-zinc-900 dark:hover:bg-white"
                       >
-                        {catBusy === r.slug ? "…" : "Enregistrer"}
-                      </button>
+                        {catBusy === r.slug ? "…" : "URLs"}
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -268,16 +342,16 @@ export default function AdminCardCatalogPage() {
             </table>
           </div>
         )}
-      </section>
+      </SurfaceCard>
 
-      {err && (
-        <pre className="overflow-x-auto rounded-lg bg-red-50 p-3 text-xs text-red-800 dark:bg-red-950/40 dark:text-red-200">
-          {err}
-        </pre>
-      )}
+      {err ? (
+        <StatusMessage variant="error">
+          <pre className="overflow-x-auto text-xs">{err}</pre>
+        </StatusMessage>
+      ) : null}
 
       {!data?.items.length ? (
-        <p className="rounded-xl border border-zinc-200 p-6 text-sm text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+        <SurfaceCard className="p-6 text-sm text-muted-foreground">
           Aucune proposition en attente. Une ligne apparaît ici seulement lorsque
           un <strong>nouveau</strong> PDF produit un extrait dont le hash{" "}
           <strong>diffère</strong> du snapshot déjà enregistré sur le produit
@@ -285,24 +359,21 @@ export default function AdminCardCatalogPage() {
           sont appliquées automatiquement aux cartes liées — il n&apos;y a alors
           rien à valider ici. Ouvre la fiche carte : lien PDF, résumé extrait et
           règles synchronisées.
-        </p>
+        </SurfaceCard>
       ) : (
         <div className="space-y-4">
           {data.items.map((row) => (
-            <article
-              key={row.id}
-              className="rounded-xl border border-zinc-200 bg-white/60 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/40"
-            >
+            <SurfaceCard key={row.id} className="p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
+                  <h2 className="text-base font-semibold text-foreground dark:text-foreground">
                     {row.product.name}
                   </h2>
-                  <p className="text-sm text-zinc-600 dark:text-zinc-400">{row.product.issuer}</p>
-                  <p className="mt-1 font-mono text-xs text-zinc-500">
+                  <p className="text-sm text-muted-foreground dark:text-muted-foreground">{row.product.issuer}</p>
+                  <p className="mt-1 font-mono text-xs text-muted-foreground">
                     slug: {row.product.slug}
                   </p>
-                  <p className="mt-2 text-xs text-zinc-500">
+                  <p className="mt-2 text-xs text-muted-foreground">
                     Proposé le {new Date(row.createdAt).toLocaleString()}
                   </p>
                   {row.product.officialDocumentUrl && (
@@ -317,58 +388,58 @@ export default function AdminCardCatalogPage() {
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <button
+                  <Button
                     type="button"
                     disabled={busy === row.id}
                     onClick={() => apply(row.id)}
-                    className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
                   >
                     {busy === row.id ? "…" : "Valider & synchroniser"}
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     type="button"
+                    variant="outline"
                     disabled={busy === row.id}
                     onClick={() => dismiss(row.id)}
-                    className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-semibold dark:border-zinc-600"
                   >
                     Refuser
-                  </button>
+                  </Button>
                 </div>
               </div>
 
-              <dl className="mt-4 grid gap-2 text-xs text-zinc-600 dark:text-zinc-400 sm:grid-cols-2">
+              <dl className="mt-4 grid gap-2 text-xs text-muted-foreground dark:text-muted-foreground sm:grid-cols-2">
                 <div>
-                  <dt className="font-medium text-zinc-500">Hash précédent</dt>
+                  <dt className="font-medium text-muted-foreground">Hash précédent</dt>
                   <dd className="break-all font-mono">{row.previousHash ?? "— (premier état)"}</dd>
                 </div>
                 <div>
-                  <dt className="font-medium text-zinc-500">Hash proposé</dt>
+                  <dt className="font-medium text-muted-foreground">Hash proposé</dt>
                   <dd className="break-all font-mono">{row.proposedHash}</dd>
                 </div>
               </dl>
 
-              <button
+              <Button
                 type="button"
-                className="mt-3 text-xs font-medium text-violet-700 dark:text-violet-400"
+                variant="link"
+                className="mt-3 h-auto p-0 text-xs"
                 onClick={() =>
                   setExpanded((m) => ({ ...m, [row.id]: !m[row.id] }))
                 }
               >
                 {expanded[row.id] ? "Masquer le JSON" : "Voir le JSON extrait"}
-              </button>
+              </Button>
               {expanded[row.id] && (
-                <pre className="mt-2 max-h-80 overflow-auto rounded-lg bg-zinc-950 p-3 text-[11px] text-violet-100">
+                <pre className="mt-2 max-h-80 overflow-auto rounded-lg bg-card p-3 text-[11px] text-violet-100">
                   {JSON.stringify(row.proposedPayload, null, 2)}
                 </pre>
               )}
-            </article>
+            </SurfaceCard>
           ))}
         </div>
       )}
 
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-muted-foreground">
         Variables d’environnement et commandes Prisma : fichier{" "}
-        <code className="rounded bg-zinc-100 px-1 dark:bg-zinc-900">frontend/.env.example</code>
+        <code className="rounded bg-muted/50 px-1 dark:bg-card">frontend/.env.example</code>
         .
       </p>
     </div>

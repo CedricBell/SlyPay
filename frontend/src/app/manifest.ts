@@ -6,7 +6,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "SlyPay",
     description:
       "Geolocate nearby stores, get the best card for rewards and cashback, then pay with Apple Pay or Google Pay.",
-    start_url: "/recommend",
+    start_url: "/dashboard",
     scope: "/",
     display: "standalone",
     orientation: "portrait",

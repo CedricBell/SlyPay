@@ -54,11 +54,12 @@ export function hintFromGoogleTypes(
   for (const x of types) {
     if (G_GAS.has(x)) return SpendCategory.GAS;
   }
-  for (const x of types) {
-    if (G_GROCERIES.has(x)) return SpendCategory.GROCERIES;
-  }
+  // Dining before groceries — Google often tags eateries with broad retail/food types
   for (const x of types) {
     if (G_DINING.has(x)) return SpendCategory.DINING;
+  }
+  for (const x of types) {
+    if (G_GROCERIES.has(x)) return SpendCategory.GROCERIES;
   }
   for (const x of types) {
     if (G_ENT.has(x)) return SpendCategory.ENTERTAINMENT;
@@ -87,15 +88,6 @@ export function hintFromOsmTags(tags: {
   if (a === "fuel" || a === "charging_station") return SpendCategory.GAS;
 
   if (
-    s === "supermarket" ||
-    s === "convenience" ||
-    s === "greengrocer" ||
-    s === "health_food"
-  ) {
-    return SpendCategory.GROCERIES;
-  }
-
-  if (
     a === "restaurant" ||
     a === "fast_food" ||
     a === "cafe" ||
@@ -106,6 +98,19 @@ export function hintFromOsmTags(tags: {
     a === "ice_cream"
   ) {
     return SpendCategory.DINING;
+  }
+
+  if (s === "bakery" || s === "pastry" || s === "confectionery") {
+    return SpendCategory.DINING;
+  }
+
+  if (
+    s === "supermarket" ||
+    s === "convenience" ||
+    s === "greengrocer" ||
+    s === "health_food"
+  ) {
+    return SpendCategory.GROCERIES;
   }
 
   if (
@@ -141,4 +146,38 @@ export function hintFromOsmTags(tags: {
   }
 
   return null;
+}
+
+/** Fallback when OSM/Google tags are missing — common venue words in names */
+export function hintFromPlaceName(name: string): SpendCategory | null {
+  const n = name
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase();
+
+  if (
+    /\b(cafe|café|coffee|restaurant|resto|bistro|brasserie|pizzeria|sushi|grill|traiteur|crêperie|creperie|bar|pub|cantine)\b/u.test(
+      n,
+    )
+  ) {
+    return SpendCategory.DINING;
+  }
+  if (
+    /\b(supermarche|supermarket|epicerie|grocery|monop|carrefour|franprix)\b/u.test(
+      n,
+    )
+  ) {
+    return SpendCategory.GROCERIES;
+  }
+  if (/\b(pharmacie|pharmacy|drugstore)\b/u.test(n)) {
+    return SpendCategory.DRUGSTORES;
+  }
+  return null;
+}
+
+export function resolvePlaceCategoryHint(args: {
+  name: string;
+  fromTags?: SpendCategory | null;
+}): SpendCategory | null {
+  return args.fromTags ?? hintFromPlaceName(args.name);
 }

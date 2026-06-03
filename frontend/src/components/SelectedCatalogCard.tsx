@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 import type { CatalogTemplate } from "@/components/CardCatalogSuggest";
+import { Badge } from "@/components/ui/badge";
+import { SurfaceCard } from "@/components/ui/surface-card";
 
 type Props = {
   template: CatalogTemplate;
@@ -10,7 +12,7 @@ type Props = {
 
 export function SelectedCatalogCard({ template, accentColor }: Props) {
   return (
-    <div className="motion-enter overflow-hidden rounded-2xl border border-violet-200/80 bg-white shadow-sm dark:border-violet-900/50 dark:bg-zinc-950/60">
+    <SurfaceCard className="motion-enter overflow-hidden p-0">
       <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start">
         {template.imageUrl ? (
           <Image
@@ -18,57 +20,50 @@ export function SelectedCatalogCard({ template, accentColor }: Props) {
             alt={`${template.issuer} ${template.name}`}
             width={320}
             height={200}
-            className="h-28 w-full rounded-xl border border-zinc-200 object-cover sm:h-24 sm:w-44 dark:border-zinc-800"
+            className="h-28 w-full rounded-xl border border-border object-cover sm:h-24 sm:w-44"
             unoptimized
           />
         ) : (
           <div
-            className="h-28 w-full rounded-xl border border-zinc-200 sm:h-24 sm:w-44 dark:border-zinc-800"
+            className="h-28 w-full rounded-xl border border-border sm:h-24 sm:w-44"
             style={{ backgroundColor: accentColor }}
           />
         )}
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             {template.intelAdHocFromName ? (
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-100">
+              <Badge className="bg-emerald-500/15 text-emerald-900 dark:text-emerald-100">
                 Issuer site
-              </span>
+              </Badge>
             ) : (
-              <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-violet-900 dark:bg-violet-900/40 dark:text-violet-200">
-                Catalogue
-              </span>
+              <Badge className="bg-primary/15 text-primary">Catalogue</Badge>
             )}
-            <code className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[10px] text-zinc-600 dark:bg-zinc-900 dark:text-zinc-400">
+            <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
               {template.id}
             </code>
           </div>
-          <h2 className="text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            {template.name}
-          </h2>
-          <p className="text-sm text-zinc-600 dark:text-zinc-400">{template.issuer}</p>
+          <h2 className="text-xl font-semibold tracking-tight">{template.name}</h2>
+          <p className="text-sm text-muted-foreground">{template.issuer}</p>
         </div>
       </div>
 
-      <div className="border-t border-violet-100/80 bg-violet-50/40 px-5 py-4 dark:border-violet-900/40 dark:bg-violet-950/20">
+      <div className="border-t border-primary/15 bg-primary/5 px-5 py-4">
         <div className="flex items-center gap-3">
           <span
-            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-600/15"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15"
             aria-hidden
           >
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-violet-600 border-t-transparent dark:border-violet-400" />
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
           </span>
           <div>
-            <p className="text-sm font-semibold text-violet-900 dark:text-violet-200">
-              Analyzing rewards
-            </p>
-            <p className="mt-0.5 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-              After you save, we fetch official terms from the issuer site and
-              extract earn rates. Your score and rules will appear once analysis
-              finishes.
+            <p className="text-sm font-medium">Rewards pipeline queued</p>
+            <p className="text-xs text-muted-foreground">
+              After save, we fetch official issuer terms and map reward rules
+              automatically.
             </p>
           </div>
         </div>
       </div>
-    </div>
+    </SurfaceCard>
   );
 }

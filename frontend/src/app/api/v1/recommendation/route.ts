@@ -4,22 +4,38 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionAppUser } from "@/lib/session-user";
 import { dec } from "@/lib/serialize";
+import {
+  buildCardSpendBenefits,
+  REFERENCE_PURCHASE_USD,
+} from "@/lib/recommendation-benefits";
 import { resolveSpendCategory } from "@/server/category-resolver";
 import { decideBestCard } from "@/server/decision-engine";
 import type { EngineCard } from "@/server/decision-engine.types";
 import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
+import { rewardRulesForWalletCard } from "@/lib/credit-card-rules";
 import {
   mergeEngineOffers,
   rotatingCalendarToEngineOffers,
 } from "@/server/rotating-bonus-calendar";
 
 const bodySchema = z.object({
-  amount: z.number().min(0.01),
   merchantName: z.string().max(200).optional(),
   mcc: z.string().max(8).optional(),
   categoryHint: z.nativeEnum(SpendCategory).optional(),
   persist: z.boolean().optional(),
 });
+
+function catalogExtractForCard(
+  card: {
+    catalogProduct?: { slug: string; lastExtractJson: unknown } | null;
+    catalogProductSlug: string | null;
+  },
+): unknown {
+  if (card.catalogProduct?.lastExtractJson != null) {
+    return card.catalogProduct.lastExtractJson;
+  }
+  return null;
+}
 
 export async function POST(req: NextRequest) {
   const ctx = await getSessionAppUser();
@@ -44,14 +60,19 @@ export async function POST(req: NextRequest) {
   });
 
   const now = new Date();
+  const merchantName = dto.merchantName?.trim() || null;
 
   const dbCards = await prisma.creditCard.findMany({
     where: { userId: ctx.appUser.id, isActive: true },
     include: {
-      rewardRules: true,
       offers: true,
       catalogProduct: {
-        select: { slug: true, rotatingBonusCalendar: true },
+        select: {
+          slug: true,
+          rotatingBonusCalendar: true,
+          rewardRules: true,
+          lastExtractJson: true,
+        },
       },
     },
   });
@@ -75,12 +96,13 @@ export async function POST(req: NextRequest) {
       id: c.id,
       name: c.name,
       issuer: c.issuer,
-      rules: c.rewardRules.map((r) => ({
+      rules: rewardRulesForWalletCard(c).map((r) => ({
         category: r.category,
         multiplier: dec(r.multiplier),
         earningType: r.earningType,
         capAmountMonthly: r.capAmountMonthly ? dec(r.capAmountMonthly) : null,
         priority: r.priority,
+        excludedMerchants: r.excludedMerchants ?? [],
       })),
       offers: mergeEngineOffers(
         manualOffers,
@@ -90,11 +112,12 @@ export async function POST(req: NextRequest) {
   });
 
   const engineResult = decideBestCard({
-    amount: dto.amount,
     resolvedCategory: resolution.category,
     cards,
+    merchantName,
     now,
   });
+
   const marketCards: EngineCard[] = CARD_CATALOG_ENTRIES.map((c) => ({
     id: `catalog:${c.id}`,
     name: c.name,
@@ -108,16 +131,83 @@ export async function POST(req: NextRequest) {
     })),
     offers: rotatingCalendarToEngineOffers(c.rotatingBonusCalendar ?? null),
   }));
+
   const marketResult = decideBestCard({
-    amount: dto.amount,
     resolvedCategory: resolution.category,
     cards: marketCards,
     now,
   });
 
+  const scoreByCardId = new Map(
+    engineResult.ranked.map((r) => [r.cardId, r]),
+  );
+
+  const ranked = engineResult.ranked.map((r) => {
+    const card = dbCards.find((c) => c.id === r.cardId);
+    const matchedRule = card
+      ? rewardRulesForWalletCard(card).find(
+          (rule) => rule.category === resolution.category,
+        )
+      : undefined;
+    const calJson =
+      card?.catalogProduct?.rotatingBonusCalendar ??
+      CARD_CATALOG_ENTRIES.find(
+        (e) =>
+          e.id === (card?.catalogProduct?.slug ?? card?.catalogProductSlug),
+      )?.rotatingBonusCalendar ??
+      null;
+    const benefits = buildCardSpendBenefits({
+      extractJson: card ? catalogExtractForCard(card) : null,
+      category: resolution.category,
+      merchantName,
+      effectiveMultiplier: r.effectiveMultiplier,
+      earningType: r.earningType,
+      engineLines: r.explanationLines,
+      merchantExcluded: r.merchantExcluded,
+      ruleExcludedMerchants: matchedRule?.excludedMerchants,
+    });
+    return {
+      cardId: r.cardId,
+      cardName: r.cardName,
+      issuer: r.issuer,
+      effectiveMultiplier: r.effectiveMultiplier,
+      earningType: r.earningType,
+      rateLabel: benefits.rateLabel,
+      last4: card?.last4 ?? null,
+      colorHex: card?.colorHex ?? null,
+      benefits,
+      explanationLines: r.explanationLines,
+      catalogRotatingQuarters: Array.isArray(calJson) ? calJson : null,
+    };
+  });
+
+  const winnerScore = engineResult.bestCardId
+    ? scoreByCardId.get(engineResult.bestCardId)
+    : undefined;
+  const bestWallet = engineResult.bestCardId
+    ? dbCards.find((c) => c.id === engineResult.bestCardId)
+    : undefined;
+
+  const bestCardBenefits =
+    winnerScore && bestWallet
+      ? buildCardSpendBenefits({
+          extractJson: catalogExtractForCard(bestWallet),
+          category: resolution.category,
+          merchantName,
+          effectiveMultiplier: winnerScore.effectiveMultiplier,
+          earningType: winnerScore.earningType,
+          engineLines: winnerScore.explanationLines,
+          merchantExcluded: winnerScore.merchantExcluded,
+          ruleExcludedMerchants: rewardRulesForWalletCard(bestWallet).find(
+            (rule) => rule.category === resolution.category,
+          )?.excludedMerchants,
+        })
+      : null;
+
   const explanation = {
     categoryTrace: resolution.trace,
     resolvedCategory: resolution.category,
+    merchantName,
     winner: engineResult.winner,
     ranked: engineResult.ranked,
     alternatesTied: engineResult.alternatesTied,
@@ -136,9 +226,9 @@ export async function POST(req: NextRequest) {
     const created = await prisma.recommendation.create({
       data: {
         userId: ctx.appUser.id,
-        amount: dto.amount,
+        amount: REFERENCE_PURCHASE_USD,
         resolvedCategory: resolution.category,
-        merchantName: dto.merchantName?.slice(0, 200),
+        merchantName: merchantName?.slice(0, 200) ?? null,
         mcc: dto.mcc?.replace(/\D/g, "").slice(0, 4) || null,
         bestCardId: engineResult.bestCardId,
         explanation: explanation as object,
@@ -151,63 +241,67 @@ export async function POST(req: NextRequest) {
     recommendationId = created.id;
   }
 
-  const bestCard = engineResult.bestCardId
-    ? dbCards.find((c) => c.id === engineResult.bestCardId)
+  const marketWinner = marketResult.winner;
+  const marketCatalogEntry = marketWinner
+    ? CARD_CATALOG_ENTRIES.find(
+        (e) => `catalog:${e.id}` === marketWinner.cardId,
+      )
     : undefined;
+
+  const marketBenefits = marketWinner
+    ? buildCardSpendBenefits({
+        extractJson: null,
+        category: resolution.category,
+        merchantName,
+        effectiveMultiplier: marketWinner.effectiveMultiplier,
+        earningType: marketWinner.earningType,
+        engineLines: marketWinner.explanationLines,
+      })
+    : null;
 
   return NextResponse.json({
     recommendationId,
     evaluationDate: now.toISOString(),
-    amount: dto.amount,
     resolvedCategory: resolution.category,
     categoryResolution: {
       merchantId: resolution.merchantId,
       trace: resolution.trace,
     },
     bestCardId: engineResult.bestCardId,
-    bestComparableValue: engineResult.bestComparableValue,
-    bestCard: bestCard
+    bestCard: bestWallet
       ? {
-          id: bestCard.id,
-          name: bestCard.name,
-          issuer: bestCard.issuer,
-          last4: bestCard.last4,
-          colorHex: bestCard.colorHex,
+          id: bestWallet.id,
+          name: bestWallet.name,
+          issuer: bestWallet.issuer,
+          last4: bestWallet.last4,
+          colorHex: bestWallet.colorHex,
         }
       : null,
-    reasoning: engineResult.winner?.explanationLines ?? [],
+    bestCardBenefits,
+    reasoning: [
+      ...(engineResult.winner?.explanationLines ?? []),
+      ...(bestCardBenefits?.statementCredits.map(
+        (c) =>
+          `Statement credit: ${c.description}${c.amountText ? ` (${c.amountText})` : ""}${c.cadence ? ` — ${c.cadence}` : ""}`,
+      ) ?? []),
+      ...(bestCardBenefits?.protections.map(
+        (p) => `Protection: ${p.title} — ${p.coverageSummary}`,
+      ) ?? []),
+      ...(bestCardBenefits?.loyaltyPerks.map((p) => `Loyalty perk: ${p}`) ?? []),
+      ...(bestCardBenefits?.merchantExclusionNotes ?? []),
+    ],
     alternatesTied: engineResult.alternatesTied,
-    ranked: engineResult.ranked.map((r) => {
-      const card = dbCards.find((c) => c.id === r.cardId);
-      const calJson =
-        card?.catalogProduct?.rotatingBonusCalendar ??
-        CARD_CATALOG_ENTRIES.find(
-          (e) =>
-            e.id === (card?.catalogProduct?.slug ?? card?.catalogProductSlug),
-        )?.rotatingBonusCalendar ??
-        null;
-      return {
-        cardId: r.cardId,
-        cardName: r.cardName,
-        issuer: r.issuer,
-        comparableValue: r.comparableValue,
-        effectiveMultiplier: r.effectiveMultiplier,
-        earningType: r.earningType,
-        last4: card?.last4 ?? null,
-        colorHex: card?.colorHex ?? null,
-        catalogRotatingQuarters: Array.isArray(calJson) ? calJson : null,
-      };
-    }),
-    marketBest: marketResult.winner
+    ranked,
+    marketBest: marketWinner
       ? {
-          cardId: marketResult.winner.cardId,
-          cardName: marketResult.winner.cardName,
-          issuer: marketResult.winner.issuer,
-          comparableValue: marketResult.winner.comparableValue,
-          effectiveMultiplier: marketResult.winner.effectiveMultiplier,
-          earningType: marketResult.winner.earningType,
-          deltaVsWalletBest:
-            marketResult.winner.comparableValue - engineResult.bestComparableValue,
+          cardId: marketWinner.cardId,
+          cardName: marketWinner.cardName,
+          issuer: marketWinner.issuer,
+          effectiveMultiplier: marketWinner.effectiveMultiplier,
+          earningType: marketWinner.earningType,
+          rateLabel: marketBenefits?.rateLabel ?? "",
+          benefits: marketBenefits,
+          catalogName: marketCatalogEntry?.name ?? marketWinner.cardName,
         }
       : null,
   });
