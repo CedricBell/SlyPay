@@ -1,5 +1,7 @@
 import { API_BASE } from "./config";
 
+export { apiFetchCached, invalidateApiCache } from "./api-cache";
+
 export class ApiError extends Error {
   status: number;
   body: string;

@@ -15,6 +15,9 @@ import {
 } from "@/server/card-intelligence/intel-document-intent";
 import { htmlDocumentToPlainText } from "@/server/card-intelligence/html-to-intel-text";
 import {
+  isAncillaryIssuerFeaturePath,
+  isIssuerCardProductMarketingPath,
+  isIssuerLegalHubListingPath,
   looksLikeOfficialTermsHtmlPath,
   pathBonusForIntelDocument,
 } from "@/server/card-intelligence/intel-path-bonus";
@@ -117,6 +120,7 @@ function scoreProductPageUrl(
   if (LOGIN_PATH.test(pathL)) return -1;
   if (pathL.endsWith(".pdf")) return -1;
   if (TRAVEL_HUB_PATH.test(pathL)) return -1;
+  if (isAncillaryIssuerFeaturePath(pathL)) return -1;
 
   let s = scorePdfCandidate({
     url: raw,
@@ -148,6 +152,21 @@ function scoreProductPageUrl(
     s -= 50;
   }
 
+  if (/americanexpress\.com/i.test(u.hostname)) {
+    if (isIssuerCardProductMarketingPath(u.hostname, u.pathname)) {
+      s += 90;
+    }
+    if (/\/card\/[^/]+-card\/?$/i.test(pathL)) {
+      s -= 55;
+    }
+    if (/\/card\/[^/]+\/?$/i.test(pathL) && !/-card\/?$/i.test(pathL)) {
+      s += 35;
+    }
+    if (/\/apply\/terms\//i.test(pathL)) {
+      s += 25;
+    }
+  }
+
   return s;
 }
 
@@ -170,6 +189,9 @@ function scoreRewardsRulesTarget(
   if (LOGIN_PATH.test(u.pathname)) return -1;
   const pathL = (u.pathname + u.search).toLowerCase();
   if (TRAVEL_HUB_PATH.test(pathL)) return -1;
+  if (isAncillaryIssuerFeaturePath(pathL) || isIssuerLegalHubListingPath(pathL)) {
+    return -1;
+  }
 
   let s =
     scorePdfCandidate({
@@ -181,6 +203,10 @@ function scoreRewardsRulesTarget(
       exclusionTerms: args.exclusionTerms,
       resultIndex: 0,
     }) + pathBonusForIntelDocument(u);
+
+  if (/\/credit-cards\/card\/[^/]+\/apply\/terms/i.test(pathL)) {
+    s += 110;
+  }
 
   const intent = classifyIntelDocumentIntent(raw, hint);
   if (looksLikeRewardsRulesLink({ url: raw, anchorText: hint })) {
@@ -406,9 +432,27 @@ export async function discoverIntelViaCardProductPage(args: {
     rulesTargets.push(...collectRulesFromHtml(html, productUrl, args.hosts, scoreArgs));
   }
 
-  const best = await pickBestRulesTarget(rulesTargets);
-  if (!best) return null;
+  const rulesFiltered = rulesTargets.filter(
+    (t) => !isAncillaryIssuerFeaturePath(t.url),
+  );
+  const best = await pickBestRulesTarget(rulesFiltered);
+  if (best) {
+    const sourceKind = await inferKind(best.url);
+    return { url: best.url, sourceKind };
+  }
 
-  const sourceKind = await inferKind(best.url);
-  return { url: best.url, sourceKind };
+  const productFallback = rankedProducts.find(([u]) => {
+    try {
+      const parsed = new URL(u);
+      return isIssuerCardProductMarketingPath(parsed.hostname, parsed.pathname);
+    } catch {
+      return false;
+    }
+  });
+  if (productFallback) {
+    const sourceKind = await inferKind(productFallback[0]);
+    return { url: productFallback[0], sourceKind };
+  }
+
+  return null;
 }

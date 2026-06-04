@@ -15,6 +15,7 @@ BEGIN;
 
 -- ── 1. Pipeline intel ───────────────────────────────────────────────────────
 DELETE FROM "CardCatalogBenefit";
+DELETE FROM "CatalogCardImageBlob";
 DELETE FROM "CatalogDocumentBlob";
 DELETE FROM "RewardRule";
 DELETE FROM "CardIntelJob";

@@ -3,7 +3,6 @@
 import { MapPin, Navigation, RefreshCw } from "lucide-react";
 import { MerchantInput } from "@/components/MerchantInput";
 import { RecommendationCard } from "@/components/RecommendationCard";
-import { WalletCardList } from "@/components/WalletCardList";
 import { NearbyPlacesView } from "@/components/nearby-places-view";
 import { StatusMessage } from "@/components/status-message";
 import { CategoryChip } from "@/components/category-chip";
@@ -12,8 +11,7 @@ import { Button } from "@/components/ui/button";
 import { SurfaceCard } from "@/components/ui/surface-card";
 import { useNearbyCheckout } from "@/hooks/use-nearby-checkout";
 import { cn } from "@/lib/utils";
-import { displayName, matchCategory, placeKey } from "@/lib/nearby-types";
-import { categoryLabelFromUi, getCategoryUi } from "@/lib/spend-category-ui";
+import { displayName, matchCategory } from "@/lib/nearby-types";
 
 export function NearbyCheckout() {
   const checkout = useNearbyCheckout();
@@ -21,9 +19,6 @@ export function NearbyCheckout() {
     merchant,
     setMerchant,
     onMerchantPick,
-    cards,
-    focusId,
-    setFocusId,
     result,
     loading,
     err,
@@ -41,7 +36,6 @@ export function NearbyCheckout() {
     setOneTapBanner,
     setPlaceCategoryHint,
     selectedKey,
-    alternativeMatches,
     applyMatch,
     runRecommendation,
     detectNearby,
@@ -135,39 +129,6 @@ export function NearbyCheckout() {
         </div>
       </SurfaceCard>
 
-      {alternativeMatches.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
-          <span className="w-full text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Other nearby places
-          </span>
-          {alternativeMatches.map((n) => {
-            const category = matchCategory(n);
-            const ui = getCategoryUi(category);
-            const Icon = ui.icon;
-            const label = displayName(n);
-            return (
-              <Button
-                key={`alt-${placeKey(n)}`}
-                type="button"
-                variant="pill"
-                size="pill"
-                className={cn("gap-1.5", ui.chipClass)}
-                onClick={() => {
-                  applyMatch(n);
-                  setOneTapBanner(
-                    `Selected ${label}. Tap “Get recommendation”.`,
-                  );
-                }}
-              >
-                <Icon className={cn("size-3.5 shrink-0", ui.iconClass)} />
-                {label}
-                <span className="opacity-70">· {categoryLabelFromUi(category)}</span>
-              </Button>
-            );
-          })}
-        </div>
-      ) : null}
-
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -182,21 +143,6 @@ export function NearbyCheckout() {
             onUserInput={() => setPlaceCategoryHint(null)}
             onPick={onMerchantPick}
           />
-        </SurfaceCard>
-
-        <SurfaceCard className="p-4 sm:p-5">
-          <p className="mb-3 text-sm font-medium">
-            Highlight a card (optional)
-          </p>
-          <WalletCardList
-            cards={cards}
-            selectedId={focusId}
-            onSelect={setFocusId}
-          />
-          <p className="mt-3 text-xs text-muted-foreground">
-            Selection is visual only in MVP; the engine still evaluates your
-            full active wallet.
-          </p>
         </SurfaceCard>
 
         {err ? (

@@ -34,6 +34,9 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "www.discover.com" },
       { protocol: "https", hostname: "www.apple.com" },
       { protocol: "https", hostname: "www.biltrewards.com" },
+      { protocol: "https", hostname: "www.wellsfargo.com" },
+      { protocol: "https", hostname: "www.bankofamerica.com" },
+      { protocol: "https", hostname: "www.usbank.com" },
     ],
   },
   /** Declares Turbopack-aware config so dev + warnings stay aligned with `next dev --turbopack`. */

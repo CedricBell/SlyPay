@@ -2,18 +2,10 @@ import type { CardCatalogEntry } from "./card-catalog.types";
 import { ROTATING_CALENDARS_BY_SLUG } from "@/server/rotating-calendars.data";
 
 /**
- * Catalog identities for autocomplete + `CardCatalogProduct.slug`.
- * Reward specifics come from the intelligence pipeline (`officialDocumentUrl` when set).
- */
-function cardImage(label: string): string {
-  return `https://placehold.co/320x200/111827/F9FAFB/png?text=${encodeURIComponent(label)}`;
-}
-
-/**
  * Curated issuer-hosted card art (official marketing assets).
  * Falls back to placeholder when not listed.
  */
-const CURATED_IMAGE_URLS: Record<string, string> = {
+export const CURATED_CATALOG_IMAGE_URLS: Record<string, string> = {
   "chase-sapphire-preferred":
     "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-sapphire-preferred/card-sapphire-preferred.png",
   "chase-sapphire-reserve":
@@ -25,7 +17,7 @@ const CURATED_IMAGE_URLS: Record<string, string> = {
   "amex-gold":
     "https://www.americanexpress.com/content/dam/amex/us/en/credit-cards/card-art/consumer/gold-card/gold-card-480x304.png",
   "amex-platinum":
-    "https://www.americanexpress.com/content/dam/amex/us/en/credit-cards/card-art/consumer/platinum-card/platinum-card-480x304.png",
+    "https://www.americanexpress.com/en-us/account/get-started/platinum/images/platinum-metal.png",
   "amex-blue-cash-preferred":
     "https://www.americanexpress.com/content/dam/amex/us/en/credit-cards/card-art/consumer/blue-cash-preferred/blue-cash-preferred-480x304.png",
   "amex-blue-cash-everyday":
@@ -42,6 +34,34 @@ const CURATED_IMAGE_URLS: Record<string, string> = {
     "https://www.apple.com/v/apple-card/d/images/overview/apple_card__c8uwy0f3xoyq_large.png",
   "bilt-mastercard":
     "https://www.biltrewards.com/assets/images/card/bilt-card-front.png",
+  "chase-amazon-prime-visa":
+    "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-amazon-rewards/card-amazon-rewards.png",
+  "wells-fargo-active-cash":
+    "https://www.wellsfargo.com/assets/images/credit-cards/active-cash-card.png",
+  "capital-one-savor":
+    "https://ecm.capitalone.com/WCM/card/products/savor-card-art.png",
+  "capital-one-quicksilver":
+    "https://ecm.capitalone.com/WCM/card/products/quicksilver-card-art.png",
+  "capital-one-venture":
+    "https://ecm.capitalone.com/WCM/card/products/venture-card-art.png",
+  "capital-one-savorone":
+    "https://ecm.capitalone.com/WCM/card/products/savorone-card-art.png",
+  "citi-custom-cash":
+    "https://www.citi.com/CRD/images/card_art/citi-custom-cash-card.png",
+  "citi-premier":
+    "https://www.citi.com/CRD/images/card_art/citi-strata-premier-card.png",
+  "discover-it-miles":
+    "https://www.discover.com/content/dam/discover/en_us/credit-cards/card-art/discover-it-miles.png",
+  "wells-fargo-autograph":
+    "https://www.wellsfargo.com/assets/images/credit-cards/autograph-card.png",
+  "boa-customized-cash":
+    "https://www.bankofamerica.com/content/images/structured-images/credit-cards/ccusccm-bac-cash-rewards.png",
+  "boa-unlimited-cash":
+    "https://www.bankofamerica.com/content/images/structured-images/credit-cards/ccusccm-bac-unlimited-cash-rewards.png",
+  "usbank-altitude-go":
+    "https://www.usbank.com/dam/images/card-art/altitude-go-visa-signature.png",
+  "usbank-cash-plus":
+    "https://www.usbank.com/dam/images/card-art/cash-plus-visa-signature.png",
 };
 
 /** Preferred intel source pages (product / offer details — not travel hubs). */
@@ -56,7 +76,7 @@ const CURATED_OFFICIAL_URLS: Record<string, string> = {
     "https://creditcards.chase.com/cash-back-credit-cards/freedom/flex",
   "amex-gold": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
   "amex-platinum":
-    "https://www.americanexpress.com/us/credit-cards/card/platinum-card/",
+    "https://www.americanexpress.com/us/credit-cards/card/platinum/",
   "amex-blue-cash-preferred":
     "https://www.americanexpress.com/us/credit-cards/card/blue-cash-preferred/",
   "amex-blue-cash-everyday":
@@ -306,7 +326,7 @@ export const CARD_CATALOG_ENTRIES: CardCatalogEntry[] = RAW.map((r) => ({
   issuer: r.issuer,
   colorHex: r.colorHex,
   officialDocumentUrl: r.officialDocumentUrl ?? CURATED_OFFICIAL_URLS[r.id],
-  imageUrl: r.imageUrl ?? CURATED_IMAGE_URLS[r.id] ?? cardImage(r.imageLabel),
+  imageUrl: r.imageUrl ?? CURATED_CATALOG_IMAGE_URLS[r.id],
   rules: [],
   rotatingBonusCalendar: ROTATING_CALENDARS_BY_SLUG[r.id],
 }));

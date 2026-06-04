@@ -11,6 +11,35 @@ export function rewardRulesForWalletCard(card: {
   return card.catalogProduct?.rewardRules ?? [];
 }
 
+/** Lighter include for wallet list (skips large extract JSON blobs). */
+export const walletCardListInclude = {
+  offers: true,
+  catalogProduct: {
+    select: {
+      slug: true,
+      name: true,
+      issuer: true,
+      lastExtractHash: true,
+      officialDocumentUrl: true,
+      rotatingBonusCalendar: true,
+      rewardRules: {
+        orderBy: [{ priority: "asc" as const }, { multiplier: "desc" as const }],
+      },
+      imageUrl: true,
+    },
+  },
+  intelJobs: {
+    orderBy: { createdAt: "desc" as const },
+    take: 1,
+    select: {
+      status: true,
+      errorMessage: true,
+      startedAt: true,
+      createdAt: true,
+    },
+  },
+};
+
 export const walletCardInclude = {
   offers: true,
   catalogProduct: {

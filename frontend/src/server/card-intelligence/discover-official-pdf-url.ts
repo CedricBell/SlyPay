@@ -13,6 +13,7 @@ import {
   intentScoreAdjustment,
 } from "@/server/card-intelligence/intel-document-intent";
 import {
+  isAncillaryIssuerFeaturePath,
   looksLikeOfficialTermsHtmlPath,
   pathBonusForIntelDocument,
 } from "@/server/card-intelligence/intel-path-bonus";
@@ -170,6 +171,7 @@ async function pickBestOfficialIntelSource(
     }
     if (url.protocol !== "https:") continue;
     if (!hostnameMatchesIssuer(url.hostname, hosts)) continue;
+    if (isAncillaryIssuerFeaturePath(url.pathname + url.search)) continue;
     const base = scorePdfCandidate({
       url: raw,
       hint,

@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { CheckCircle2, Loader2, Sparkles } from "lucide-react";
-import { intelStatusLabel } from "@/lib/card-intel-status";
+import { intelProgressState, INTEL_RUNNING_STEPS } from "@/lib/card-intel-status";
 import type { MappedIntelJob } from "@/lib/map-credit-card";
 import { cn } from "@/lib/utils";
 
@@ -23,11 +24,31 @@ export function CardIntelProgress({
 }: Props) {
   const hasLiveExtract = Boolean(pdfSummary || creditHints.length);
   const hasRules = ruleHighlights.length > 0;
-  const label = intelStatusLabel(intelJob, hasLiveExtract);
   const failed =
     intelJob?.status === "FAILED" || intelJob?.status === "SKIPPED_NO_SOURCE";
 
+  const isActive =
+    !failed &&
+    !hasRules &&
+    (!intelJob ||
+      intelJob.status === "PENDING" ||
+      intelJob.status === "RUNNING");
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!isActive) return;
+    const id = setInterval(() => setNowMs(Date.now()), 320);
+    return () => clearInterval(id);
+  }, [isActive]);
+
   if (hasRules) return null;
+
+  const { stepIndex, stepCount, activeStepFill, label } = intelProgressState(
+    intelJob,
+    hasLiveExtract,
+    nowMs,
+  );
 
   return (
     <div
@@ -58,7 +79,7 @@ export function CardIntelProgress({
             <Loader2 className="size-4" strokeWidth={2.25} />
           )}
         </motion.span>
-        <div className="min-w-0 flex-1 space-y-2">
+        <div className="min-w-0 flex-1 space-y-3">
           <p
             className={cn(
               "text-sm font-medium",
@@ -67,15 +88,34 @@ export function CardIntelProgress({
           >
             {label}
           </p>
+
           {!failed && (
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted/60">
-              <motion.div
-                className="h-full rounded-full bg-gradient-to-r from-violet-500 to-blue-500"
-                initial={{ width: "8%" }}
-                animate={{ width: hasLiveExtract ? "78%" : "42%" }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
-              />
-            </div>
+            <ol
+              className="flex gap-1.5"
+              aria-label={`Step ${stepIndex + 1} of ${stepCount}`}
+            >
+              {INTEL_RUNNING_STEPS.map((step, i) => {
+                const done = i < stepIndex;
+                const active = i === stepIndex;
+                const fill =
+                  done ? 1 : active ? Math.max(0.12, activeStepFill) : 0;
+                return (
+                  <li
+                    key={step}
+                    title={step}
+                    className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted/70"
+                  >
+                    <div
+                      className={cn(
+                        "h-full rounded-full transition-[width] duration-300 ease-out",
+                        done || active ? "bg-violet-500" : "bg-transparent",
+                      )}
+                      style={{ width: `${fill * 100}%` }}
+                    />
+                  </li>
+                );
+              })}
+            </ol>
           )}
         </div>
       </div>

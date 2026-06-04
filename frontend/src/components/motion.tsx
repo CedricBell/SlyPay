@@ -13,11 +13,11 @@ import { cn } from "@/lib/utils";
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 export const fadeInUp: Variants = {
-  hidden: { opacity: 0, y: 12 },
+  hidden: { opacity: 0, y: 8 },
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.45, ease: EASE },
+    transition: { duration: 0.22, ease: EASE },
   },
 };
 
@@ -39,12 +39,12 @@ export function FadeIn({ className, delay = 0, ...props }: FadeInProps) {
   return (
     <motion.div
       className={cn(className)}
-      initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+      initial={reduceMotion ? false : { opacity: 0, y: 8 }}
       animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
       transition={
         reduceMotion
           ? undefined
-          : { duration: 0.45, delay, ease: EASE }
+          : { duration: 0.22, delay, ease: EASE }
       }
       {...props}
     />

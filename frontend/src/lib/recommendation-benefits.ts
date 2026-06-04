@@ -1,10 +1,11 @@
 import { EarningType, SpendCategory } from "@prisma/client";
 import {
-  rewardsExtractSchema,
+  parseRewardsExtract,
   type RewardsExtract,
 } from "@/server/card-intelligence/rewards-extract-schema";
 import { isMerchantExcluded } from "@/server/merchant-exclusions";
 import { categoryLabelFromUi } from "@/lib/spend-category-ui";
+import { formatStatementCreditHint } from "@/lib/statement-credit-display";
 
 /** Fixed reference for %-based ranking (purchase size does not change the winner). */
 export const REFERENCE_PURCHASE_USD = 100;
@@ -87,7 +88,7 @@ function textMatchesCategory(text: string, category: SpendCategory): boolean {
 export function parseCatalogRewardsExtract(json: unknown): RewardsExtract | null {
   if (json == null) return null;
   try {
-    return rewardsExtractSchema.parse(json);
+    return parseRewardsExtract(json);
   } catch {
     return null;
   }
@@ -342,12 +343,13 @@ export function buildCardSpendBenefits(args: {
 }
 
 export function formatStatementCreditLine(c: SpendBenefitCredit): string {
-  const parts = [c.description];
-  if (c.amountText) parts.push(c.amountText);
-  if (c.merchantHint) parts.push(`@${c.merchantHint}`);
-  if (c.cadence) parts.push(`(${c.cadence})`);
-  if (c.enrollmentRequired) parts.push("(enrollment required)");
-  return parts.join(" · ");
+  return formatStatementCreditHint({
+    description: c.description,
+    amountText: c.amountText,
+    cadence: c.cadence,
+    merchantHint: c.merchantHint,
+    enrollmentRequired: c.enrollmentRequired,
+  });
 }
 
 export function formatProtectionLine(p: SpendBenefitProtection): string {

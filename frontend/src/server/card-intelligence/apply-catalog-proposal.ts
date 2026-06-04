@@ -2,7 +2,7 @@ import { EarningType, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { mapExtractToRewardRules } from "@/server/card-intelligence/map-extract-to-reward-rules";
 import { applyExtractSnapshotToCatalog, applyRewardRulesToCatalogProduct } from "@/server/catalog-reward-rules";
-import { rewardsExtractSchema } from "@/server/card-intelligence/rewards-extract-schema";
+import { parseRewardsExtract } from "@/server/card-intelligence/rewards-extract-schema";
 import {
   sanitizeRewardRuleDrafts,
   type RewardRuleDraft,
@@ -44,7 +44,7 @@ export async function applyCatalogExtractProposal(proposalId: string): Promise<{
     throw new Error("Cette proposition n'est plus en attente");
   }
 
-  const extract = rewardsExtractSchema.parse(proposal.proposedPayload);
+  const extract = parseRewardsExtract(proposal.proposedPayload);
 
   const drafts = await mapExtractToRewardRules({
     productName: proposal.product.name,

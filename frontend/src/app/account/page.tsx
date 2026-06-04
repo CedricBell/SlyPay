@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { UserRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { apiFetch, ApiError } from "@/lib/api";
-import { WalletOptimizationPanel } from "@/components/wallet-optimization-panel";
+import { apiFetch, ApiError, invalidateApiCache } from "@/lib/api";
+import { useAppData } from "@/lib/app-data";
 import { FadeIn } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
 import { StatusMessage } from "@/components/status-message";
@@ -12,289 +13,369 @@ import { Button } from "@/components/ui/button";
 import { Field, inputClassName } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { SurfaceCard } from "@/components/ui/surface-card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { WalletOptimizationScore } from "@/lib/wallet-optimization-score";
+import { cn } from "@/lib/utils";
 
-type MeResponse = {
-  id: string;
+type FormSnapshot = {
+  firstName: string;
+  lastName: string;
   email: string;
-  firstName: string | null;
-  lastName: string | null;
-  optimization: WalletOptimizationScore;
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
 };
+
+function displayName(first: string, last: string, email: string): string {
+  const full = [first.trim(), last.trim()].filter(Boolean).join(" ");
+  if (full) return full;
+  return email.split("@")[0] ?? "Account";
+}
+
+function initials(first: string, last: string, email: string): string {
+  const f = first.trim()[0];
+  const l = last.trim()[0];
+  if (f && l) return `${f}${l}`.toUpperCase();
+  if (f) return f.toUpperCase();
+  const e = email.trim()[0];
+  return e ? e.toUpperCase() : "?";
+}
 
 export default function AccountPage() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const { me, meReady, refreshMe } = useAppData();
   const [err, setErr] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const [email, setEmail] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [optimization, setOptimization] = useState<WalletOptimizationScore>({
-    overallPercent: 0,
-    hasCards: false,
-    categories: [],
-  });
-
-  const [newEmail, setNewEmail] = useState("");
+  const [email, setEmail] = useState("");
+  const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [savingProfile, setSavingProfile] = useState(false);
-  const [savingEmail, setSavingEmail] = useState(false);
-  const [savingPassword, setSavingPassword] = useState(false);
+  const [snapshot, setSnapshot] = useState<FormSnapshot | null>(null);
 
-  const load = useCallback(async () => {
-    const me = await apiFetch<MeResponse>("/auth/me");
-    setEmail(me.email);
-    setNewEmail(me.email);
-    setFirstName(me.firstName ?? "");
-    setLastName(me.lastName ?? "");
-    setOptimization(me.optimization);
+  const applySnapshot = useCallback((s: FormSnapshot) => {
+    setFirstName(s.firstName);
+    setLastName(s.lastName);
+    setEmail(s.email);
+    setCurrentPassword(s.currentPassword);
+    setNewPassword(s.newPassword);
+    setConfirmPassword(s.confirmPassword);
   }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        await load();
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 401) {
-          router.replace("/login");
+    if (!meReady) return;
+    if (!me) {
+      router.replace("/login");
+      return;
+    }
+    setLoginEmail(me.email);
+    const s: FormSnapshot = {
+      firstName: me.firstName ?? "",
+      lastName: me.lastName ?? "",
+      email: me.email,
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    };
+    applySnapshot(s);
+    setSnapshot(s);
+  }, [me, meReady, applySnapshot, router]);
+
+  const isDirty = useMemo(() => {
+    if (!snapshot) return false;
+    return (
+      firstName !== snapshot.firstName ||
+      lastName !== snapshot.lastName ||
+      email.trim().toLowerCase() !== snapshot.email.toLowerCase() ||
+      newPassword.length > 0 ||
+      currentPassword.length > 0 ||
+      confirmPassword.length > 0
+    );
+  }, [
+    snapshot,
+    firstName,
+    lastName,
+    email,
+    newPassword,
+    currentPassword,
+    confirmPassword,
+  ]);
+
+  const cancel = () => {
+    if (!snapshot) return;
+    applySnapshot(snapshot);
+    setErr(null);
+    setMsg(null);
+  };
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!snapshot) return;
+    setErr(null);
+    setMsg(null);
+
+    const wantsProfile =
+      firstName !== snapshot.firstName || lastName !== snapshot.lastName;
+    const wantsEmail =
+      email.trim().toLowerCase() !== snapshot.email.toLowerCase();
+    const wantsPassword = newPassword.length > 0;
+
+    if (!wantsProfile && !wantsEmail && !wantsPassword) {
+      setMsg("No changes to save.");
+      return;
+    }
+
+    if (wantsPassword) {
+      if (newPassword.length < 8) {
+        setErr("Password must be at least 8 characters.");
+        return;
+      }
+      if (newPassword !== confirmPassword) {
+        setErr("New passwords do not match.");
+        return;
+      }
+      if (!currentPassword) {
+        setErr("Enter your current password to set a new one.");
+        return;
+      }
+    }
+
+    setSaving(true);
+    const messages: string[] = [];
+
+    try {
+      if (wantsProfile) {
+        await apiFetch("/auth/me", {
+          method: "PATCH",
+          body: JSON.stringify({ firstName, lastName }),
+        });
+        messages.push("Profile saved");
+      }
+
+      const supabase = createClient();
+
+      if (wantsEmail) {
+        const { error } = await supabase.auth.updateUser({
+          email: email.trim(),
+        });
+        if (error) {
+          setErr(error.message);
           return;
         }
-        setErr("Could not load account");
-      } finally {
-        setLoading(false);
+        messages.push(
+          "Confirmation email sent — your login updates after you confirm",
+        );
       }
-    })();
-  }, [load, router]);
 
-  const saveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErr(null);
-    setMsg(null);
-    setSavingProfile(true);
-    try {
-      await apiFetch("/auth/me", {
-        method: "PATCH",
-        body: JSON.stringify({ firstName, lastName }),
-      });
-      setMsg("Profile updated.");
+      if (wantsPassword) {
+        const { error: signInErr } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: currentPassword,
+        });
+        if (signInErr) {
+          setErr("Current password is incorrect.");
+          return;
+        }
+        const { error } = await supabase.auth.updateUser({
+          password: newPassword,
+        });
+        if (error) {
+          setErr(error.message);
+          return;
+        }
+        messages.push("Password updated");
+      }
+
+      const next: FormSnapshot = {
+        firstName,
+        lastName,
+        email: wantsEmail ? snapshot.email : email.trim(),
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      };
+      setSnapshot(next);
+      applySnapshot(next);
+      invalidateApiCache("/auth/me");
+      void refreshMe(true);
+      setMsg(messages.join(". ") + ".");
     } catch (e) {
       if (e instanceof ApiError) setErr(e.message);
-      else setErr("Could not save profile");
+      else setErr("Could not save changes");
     } finally {
-      setSavingProfile(false);
+      setSaving(false);
     }
   };
 
-  const saveEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErr(null);
-    setMsg(null);
-    if (newEmail.trim().toLowerCase() === email.toLowerCase()) {
-      setMsg("Email unchanged.");
-      return;
-    }
-    setSavingEmail(true);
-    try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.updateUser({
-        email: newEmail.trim(),
-      });
-      if (error) {
-        setErr(error.message);
-        return;
-      }
-      setMsg(
-        "Confirmation sent to your new address. Your login email updates after you confirm.",
-      );
-    } catch {
-      setErr("Could not update email");
-    } finally {
-      setSavingEmail(false);
-    }
-  };
-
-  const savePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErr(null);
-    setMsg(null);
-    if (newPassword.length < 8) {
-      setErr("Password must be at least 8 characters.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setErr("Passwords do not match.");
-      return;
-    }
-    setSavingPassword(true);
-    try {
-      const supabase = createClient();
-      const { error: signInErr } = await supabase.auth.signInWithPassword({
-        email,
-        password: currentPassword,
-      });
-      if (signInErr) {
-        setErr("Current password is incorrect.");
-        return;
-      }
-      const { error } = await supabase.auth.updateUser({ password: newPassword });
-      if (error) {
-        setErr(error.message);
-        return;
-      }
-      setNewPassword("");
-      setConfirmPassword("");
-      setCurrentPassword("");
-      setMsg("Password updated.");
-    } catch {
-      setErr("Could not update password");
-    } finally {
-      setSavingPassword(false);
-    }
-  };
-
-  if (loading) {
+  if (!meReady || !snapshot) {
     return (
-      <div className="py-16 text-center text-sm text-muted-foreground">
-        Loading account…
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <p className="text-sm text-muted-foreground">Loading account…</p>
       </div>
     );
   }
 
+  const name = displayName(firstName, lastName, loginEmail || me?.email || "");
+  const abbr = initials(firstName, lastName, loginEmail);
+
   return (
-    <FadeIn className="mx-auto max-w-2xl space-y-8">
+    <FadeIn className="mx-auto w-full max-w-5xl space-y-6 pb-10 sm:space-y-8">
       <PageHeader
         eyebrow="Account"
-        title="Settings"
-        description="Manage your profile, sign-in details, and see how optimized your wallet is."
+        title="Your profile"
+        description="Update your name, email, and password in one place."
+        className="max-w-3xl"
       />
+
+      <div
+        className={cn(
+          "flex flex-col gap-4 rounded-2xl border border-border/60 bg-card/50 p-4 sm:flex-row sm:items-center sm:gap-5 sm:p-5",
+          "backdrop-blur-sm md:rounded-3xl md:p-6",
+        )}
+      >
+        <div
+          className={cn(
+            "flex size-14 shrink-0 items-center justify-center rounded-2xl sm:size-16",
+            "bg-gradient-to-br from-violet-600/90 to-blue-600/90 text-lg font-semibold text-white shadow-lg shadow-violet-500/25 sm:text-xl",
+          )}
+          aria-hidden
+        >
+          {abbr.length <= 2 ? (
+            abbr
+          ) : (
+            <UserRound className="size-7 sm:size-8" strokeWidth={2} />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-lg font-semibold tracking-tight sm:text-xl">{name}</p>
+          <p className="mt-0.5 break-all text-sm text-muted-foreground sm:text-base">
+            {loginEmail}
+          </p>
+        </div>
+      </div>
 
       {err ? <StatusMessage variant="error">{err}</StatusMessage> : null}
       {msg ? <StatusMessage variant="info">{msg}</StatusMessage> : null}
 
-      <Tabs defaultValue="profile" className="gap-6">
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="optimization">Wallet score</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="profile" className="mt-0">
-          <SurfaceCard className="p-5 sm:p-6">
-            <form onSubmit={saveProfile} className="space-y-5">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="First name">
-                  <Input
-                    className={inputClassName}
-                    value={firstName}
-                    onChange={(e) => setFirstName(e.target.value)}
-                    autoComplete="given-name"
-                  />
-                </Field>
-                <Field label="Last name">
-                  <Input
-                    className={inputClassName}
-                    value={lastName}
-                    onChange={(e) => setLastName(e.target.value)}
-                    autoComplete="family-name"
-                  />
-                </Field>
-              </div>
-              <Field label="Email" hint="Change email in the Security tab.">
+      <SurfaceCard disableMotion className="overflow-hidden p-0">
+        <form onSubmit={save}>
+          <div className="grid divide-y divide-border/60 lg:grid-cols-2 lg:divide-x lg:divide-y-0">
+            <section className="space-y-5 p-5 sm:p-8 lg:p-10">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">
+                Personal information
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                How we address you in the app.
+              </p>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="First name">
                 <Input
                   className={inputClassName}
-                  type="email"
-                  value={email}
-                  disabled
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  autoComplete="given-name"
+                  placeholder="Jane"
                 />
               </Field>
-              <Button
-                type="submit"
-                variant="gradient"
-                disabled={savingProfile}
-              >
-                {savingProfile ? "Saving…" : "Save profile"}
-              </Button>
-            </form>
-          </SurfaceCard>
-        </TabsContent>
-
-        <TabsContent value="security" className="mt-0 space-y-5">
-          <SurfaceCard className="p-5 sm:p-6">
-            <h2 className="text-sm font-semibold">Email address</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Supabase sends a confirmation link to the new address.
-            </p>
-            <form onSubmit={saveEmail} className="mt-4 space-y-4">
-              <Field label="New email">
+              <Field label="Last name">
                 <Input
                   className={inputClassName}
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  required
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  autoComplete="family-name"
+                  placeholder="Doe"
                 />
               </Field>
-              <Button type="submit" variant="gradient" disabled={savingEmail}>
-                {savingEmail ? "Sending…" : "Update email"}
-              </Button>
-            </form>
-          </SurfaceCard>
+            </div>
+            <Field
+              label="Email address"
+              hint="If you change your email, we send a confirmation link to the new address."
+            >
+              <Input
+                className={inputClassName}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                required
+              />
+            </Field>
+            </section>
 
-          <SurfaceCard className="p-5 sm:p-6">
-            <h2 className="text-sm font-semibold">Password</h2>
-            <form onSubmit={savePassword} className="mt-4 space-y-4">
+            <section className="space-y-5 p-5 sm:p-8 lg:p-10">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">
+                Password
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground sm:text-sm">
+                Leave new password fields empty to keep your current password.
+              </p>
+            </div>
+            <div className="space-y-4">
               <Field label="Current password">
                 <Input
                   className={inputClassName}
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
-                  required
                   autoComplete="current-password"
+                  placeholder="Required only when changing password"
                 />
               </Field>
-              <Field label="New password">
-                <Input
-                  className={inputClassName}
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  minLength={8}
-                  required
-                  autoComplete="new-password"
-                />
-              </Field>
-              <Field label="Confirm new password">
-                <Input
-                  className={inputClassName}
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  minLength={8}
-                  required
-                  autoComplete="new-password"
-                />
-              </Field>
-              <Button
-                type="submit"
-                variant="gradient"
-                disabled={savingPassword}
-              >
-                {savingPassword ? "Updating…" : "Change password"}
-              </Button>
-            </form>
-          </SurfaceCard>
-        </TabsContent>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="New password">
+                  <Input
+                    className={inputClassName}
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    minLength={8}
+                    autoComplete="new-password"
+                    placeholder="Min. 8 characters"
+                  />
+                </Field>
+                <Field label="Confirm new password">
+                  <Input
+                    className={inputClassName}
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    minLength={8}
+                    autoComplete="new-password"
+                  />
+                </Field>
+              </div>
+            </div>
+            </section>
+          </div>
 
-        <TabsContent value="optimization" className="mt-0">
-          <WalletOptimizationPanel optimization={optimization} />
-        </TabsContent>
-      </Tabs>
+          <div className="flex flex-col-reverse gap-3 border-t border-border/60 bg-muted/30 p-5 sm:flex-row sm:items-center sm:justify-end sm:gap-4 sm:p-8 lg:px-10">
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="rounded-2xl sm:min-w-[7.5rem]"
+              disabled={saving || !isDirty}
+              onClick={cancel}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="gradient"
+              size="lg"
+              className="rounded-2xl sm:min-w-[7.5rem]"
+              disabled={saving || !isDirty}
+            >
+              {saving ? "Saving…" : "Save changes"}
+            </Button>
+          </div>
+        </form>
+      </SurfaceCard>
     </FadeIn>
   );
 }

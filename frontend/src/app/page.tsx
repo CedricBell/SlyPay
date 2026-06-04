@@ -1,16 +1,9 @@
 import Link from "next/link";
 
+import { AnimatedFeatureCard } from "@/components/animated-feature-card";
 import { Stagger, MotionItem } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { BorderBeam } from "@/components/ui/border-beam";
-import {
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { SurfaceCard } from "@/components/ui/surface-card";
 
 export default function HomePage() {
   return (
@@ -29,40 +22,19 @@ export default function HomePage() {
         </Button>
       </div>
 
-      <Stagger className="grid gap-4 sm:grid-cols-3">
+      <Stagger className="grid gap-4 sm:grid-cols-2">
         {[
           {
             t: "Nearby businesses",
             d: "OpenStreetMap plus optional Google Places discover restaurants, shops, fuel, and more near you.",
-            featured: true,
           },
           {
             t: "Rewards math",
             d: "Your rules and limited-time offers are stacked with clear reasoning—not a generic blog ranking.",
           },
-          {
-            t: "Wallet-ready",
-            d: "After you confirm the card, step-by-step guidance for Apple Pay or Google Pay at the reader.",
-          },
-        ].map((x) => (
+        ].map((x, i) => (
           <MotionItem key={x.t}>
-            <SurfaceCard className="relative overflow-hidden">
-              {"featured" in x && x.featured && (
-                <BorderBeam
-                  size={80}
-                  duration={8}
-                  colorFrom="#7c3aed"
-                  colorTo="#2563eb"
-                  borderWidth={1.5}
-                />
-              )}
-              <CardHeader>
-                <CardTitle className="text-base">{x.t}</CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <CardDescription className="leading-relaxed">{x.d}</CardDescription>
-              </CardContent>
-            </SurfaceCard>
+            <AnimatedFeatureCard title={x.t} description={x.d} index={i} />
           </MotionItem>
         ))}
       </Stagger>

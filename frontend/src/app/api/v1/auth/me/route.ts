@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { walletCardInclude } from "@/lib/credit-card-rules";
 import { prisma } from "@/lib/prisma";
 import { getSessionAppUser } from "@/lib/session-user";
-import { computeWalletOptimizationScore } from "@/lib/wallet-optimization-score";
 
 const patchBody = z.object({
   firstName: z.string().max(80).optional(),
@@ -20,13 +18,6 @@ export async function GET() {
     where: { id: ctx.appUser.id },
   });
 
-  const cards = await prisma.creditCard.findMany({
-    where: { userId: ctx.appUser.id },
-    include: walletCardInclude,
-  });
-
-  const optimization = computeWalletOptimizationScore(cards);
-
   return NextResponse.json({
     id: user.id,
     email: user.email,
@@ -35,7 +26,6 @@ export async function GET() {
     role: user.role,
     isActive: user.isActive,
     createdAt: user.createdAt,
-    optimization,
   });
 }
 

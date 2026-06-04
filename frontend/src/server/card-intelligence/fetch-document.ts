@@ -1,5 +1,5 @@
 const MAX_BYTES = 15 * 1024 * 1024;
-const MAX_HTML_BYTES = 2 * 1024 * 1024;
+const MAX_HTML_BYTES = Number(process.env.CARD_INTEL_MAX_HTML_BYTES ?? String(6 * 1024 * 1024));
 
 export function assertAllowedHttpsUrl(raw: string): URL {
   let url: URL;
@@ -79,16 +79,9 @@ export async function fetchHtmlDocument(documentUrl: string): Promise<string> {
     if (!res.ok) {
       throw new Error(`Document fetch failed: HTTP ${res.status}`);
     }
-    const lenHeader = res.headers.get("content-length");
-    if (lenHeader) {
-      const n = Number(lenHeader);
-      if (Number.isFinite(n) && n > MAX_HTML_BYTES) {
-        throw new Error("HTML document exceeds maximum size");
-      }
-    }
-    const buf = Buffer.from(await res.arrayBuffer());
+    let buf = Buffer.from(await res.arrayBuffer());
     if (buf.byteLength > MAX_HTML_BYTES) {
-      throw new Error("HTML document exceeds maximum size");
+      buf = buf.subarray(0, MAX_HTML_BYTES);
     }
     const ct = (res.headers.get("content-type") ?? "").toLowerCase();
     const head = buf.toString("utf8", 0, Math.min(512, buf.length)).trimStart();

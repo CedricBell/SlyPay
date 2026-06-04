@@ -246,3 +246,48 @@ export function stableAdHocCatalogSlug(issuer: string, name: string): string {
   const k = `${normalizeKey(issuer)}|${normalizeKey(name)}`;
   return `adhoc-${sha256Hex(k).slice(0, 24)}`;
 }
+
+const MATCH_STOPWORDS = new Set([
+  "card",
+  "cards",
+  "credit",
+  "the",
+  "visa",
+  "mastercard",
+]);
+
+/**
+ * When a typed label clearly matches a curated catalog row (e.g. Amex Platinum),
+ * prefer that slug so discovery uses the correct product URL.
+ */
+export function matchStaticCatalogSlug(
+  issuer: string,
+  cardName: string,
+): string | null {
+  const issuerN = normalizeKey(issuer);
+  const nameN = normalizeKey(cleanCardProductName(cardName));
+  const terms = nameN
+    .split(" ")
+    .filter((t) => t.length > 2 && !MATCH_STOPWORDS.has(t));
+
+  let bestId: string | null = null;
+  let bestScore = 0;
+
+  for (const e of CARD_CATALOG_ENTRIES) {
+    if (normalizeKey(e.issuer) !== issuerN) continue;
+    const entryNameN = normalizeKey(e.name);
+    let score = 0;
+    if (entryNameN === nameN) score += 200;
+    else if (entryNameN.includes(nameN) || nameN.includes(entryNameN)) {
+      score += 90;
+    }
+    for (const t of terms) {
+      if (entryNameN.includes(t)) score += 18;
+    }
+    if (score > bestScore && score >= 36) {
+      bestScore = score;
+      bestId = e.id;
+    }
+  }
+  return bestId;
+}

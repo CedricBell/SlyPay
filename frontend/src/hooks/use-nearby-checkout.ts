@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import type { SpendCategory } from "@prisma/client";
 import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
 import {
@@ -12,19 +11,13 @@ import {
   type NearbyMatch,
   type NearbyResponse,
 } from "@/lib/nearby-types";
-import {
-  type CardRow,
-  type RecRes,
-} from "@/lib/recommendation-types";
+import { type RecRes } from "@/lib/recommendation-types";
 
 const LS_GEO_GRANTED = "slypay_geo_granted";
 
 export function useNearbyCheckout() {
-  const router = useRouter();
   const [merchant, setMerchant] = useState("");
   const [mcc, setMcc] = useState("");
-  const [cards, setCards] = useState<CardRow[]>([]);
-  const [focusId, setFocusId] = useState<string | null>(null);
   const [result, setResult] = useState<RecRes | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -45,19 +38,6 @@ export function useNearbyCheckout() {
   const detectNearbyRef = useRef<(() => Promise<void>) | null>(null);
 
   const hasLocation = searchLat !== null && searchLng !== null;
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const c = await apiFetch<CardRow[]>("/cards");
-        setCards(c);
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 401) {
-          router.replace("/login");
-        }
-      }
-    })();
-  }, [router]);
 
   const knownVisibleMatches = useMemo(
     () => nearby.filter((m) => m.merchant),
@@ -268,10 +248,6 @@ export function useNearbyCheckout() {
     void setup();
   }, []);
 
-  const alternativeMatches = knownVisibleMatches
-    .filter((m) => placeKey(m) !== selectedKey)
-    .slice(0, 5);
-
   const selectedMatch = useMemo(() => {
     if (selectedKey) {
       return nearby.find((m) => placeKey(m) === selectedKey) ?? null;
@@ -283,9 +259,6 @@ export function useNearbyCheckout() {
     merchant,
     setMerchant,
     onMerchantPick,
-    cards,
-    focusId,
-    setFocusId,
     result,
     loading,
     err,
@@ -306,7 +279,6 @@ export function useNearbyCheckout() {
     setPlaceCategoryHint,
     selectedKey,
     knownVisibleMatches,
-    alternativeMatches,
     applyMatch,
     runRecommendation,
     detectNearby,

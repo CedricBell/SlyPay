@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionAppUser } from "@/lib/session-user";
+import { catalogImageSrcForDisplay } from "@/lib/catalog-image-display";
 import { searchCardCatalogMerged } from "@/server/card-catalog";
 
 export async function GET(req: NextRequest) {
@@ -12,5 +13,10 @@ export async function GET(req: NextRequest) {
   const parsed = limitRaw ? Number(limitRaw) : 12;
   const limit = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 200) : 12;
   const hits = await searchCardCatalogMerged(q, limit);
-  return NextResponse.json(hits);
+  return NextResponse.json(
+    hits.map((h) => ({
+      ...h,
+      imageUrl: catalogImageSrcForDisplay(h.imageUrl) ?? h.imageUrl,
+    })),
+  );
 }

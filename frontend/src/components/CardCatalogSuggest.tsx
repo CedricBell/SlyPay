@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useState } from "react";
+import { CatalogCardArt } from "@/components/catalog-card-art";
 import { apiFetch } from "@/lib/api";
 import { StatusMessage } from "@/components/status-message";
 import { Badge } from "@/components/ui/badge";
@@ -136,7 +136,7 @@ export function CardCatalogSuggest({
             autoComplete="off"
           />
           {open && (hits.length > 0 || loading || q.trim().length === 0) && (
-            <ul className="absolute top-full left-0 right-0 z-[200] mt-1 max-h-60 overflow-auto rounded-lg border border-border bg-popover shadow-lg">
+            <ul className="absolute top-full left-0 right-0 z-[200] mt-1 max-h-72 overflow-auto rounded-xl border border-border bg-popover shadow-2xl">
               {loading && (
                 <li className="space-y-2 px-3 py-2">
                   <Skeleton className="h-10 w-full" />
@@ -157,21 +157,14 @@ export function CardCatalogSuggest({
                       setOpen(false);
                     }}
                   >
-                    {h.imageUrl ? (
-                      <Image
-                        src={h.imageUrl}
-                        alt={`${h.issuer} ${h.name}`}
-                        width={64}
-                        height={40}
-                        className="h-10 w-16 rounded-md border border-border object-cover"
-                        unoptimized
-                      />
-                    ) : (
-                      <span
-                        className="h-10 w-16 rounded-md border border-border"
-                        style={{ backgroundColor: h.colorHex ?? "#0f172a" }}
-                      />
-                    )}
+                    <CatalogCardArt
+                      name={h.name}
+                      issuer={h.issuer}
+                      imageUrl={h.imageUrl}
+                      colorHex={h.colorHex}
+                      size="sm"
+                      className="shrink-0"
+                    />
                     <span className="flex flex-col">
                       <span className="font-medium">
                         {h.intelAdHocFromName ? (

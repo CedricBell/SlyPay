@@ -91,6 +91,7 @@ model CardCatalogProduct {
   rewardRules RewardRule[]
   benefits    CardCatalogBenefit[]
   uploadedDocument CatalogDocumentBlob?
+  cardImage     CatalogCardImageBlob?
 
   @@index([issuer])
 }
@@ -113,6 +114,19 @@ model CardCatalogBenefit {
   createdAt          DateTime           @default(now())
 
   @@index([catalogProductSlug, kind])
+}
+
+/// Official card art downloaded from issuer CDN (served via /api/v1/catalog-card-images/:slug).
+model CatalogCardImageBlob {
+  productSlug String             @id
+  product     CardCatalogProduct @relation(fields: [productSlug], references: [slug], onDelete: Cascade)
+  mimeType    String             @default("image/png")
+  byteSize    Int
+  sourceUrl   String
+  data        Bytes
+  fetchedAt   DateTime           @default(now())
+
+  @@index([fetchedAt])
 }
 
 /// Admin-uploaded issuer PDF stored in Postgres (served via /api/v1/catalog-documents/:slug).

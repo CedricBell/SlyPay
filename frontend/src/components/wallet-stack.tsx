@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { ChevronRight, Plus } from "lucide-react";
 import { CardIntelProgress } from "@/components/card-intel-progress";
@@ -9,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { MappedIntelJob } from "@/lib/map-credit-card";
 import { intelHasFailed } from "@/lib/card-intel-status";
+import type { StatementCreditDisplay } from "@/lib/statement-credit-display";
 import { cn } from "@/lib/utils";
 
 export type WalletCard = {
@@ -27,6 +29,7 @@ export type WalletCard = {
     pdfSummary: string | null;
     benefitsSummary: string | null;
     statementCreditHints: string[];
+    statementCredits?: StatementCreditDisplay[];
     protectionHints: string[];
   };
   catalogImageUrl?: string | null;
@@ -38,6 +41,7 @@ type Props = {
 
 export function WalletStack({ cards }: Props) {
   const reduceMotion = useReducedMotion();
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   if (cards.length === 0) {
     return (
@@ -63,55 +67,54 @@ export function WalletStack({ cards }: Props) {
     );
   }
 
+  const anyHovered = hoveredId !== null;
+
   return (
-    <div className="relative mx-auto max-w-lg pt-2 pb-4">
-      {/* Wallet shell */}
+    <div className="relative mx-auto max-w-lg pt-2 pb-4 md:max-w-2xl md:pt-4 md:pb-8">
       <div className="pointer-events-none absolute inset-x-4 -top-1 h-8 rounded-t-[2rem] bg-gradient-to-b from-zinc-900/8 to-transparent dark:from-white/10" />
 
-      <ul className="relative space-y-0">
+      <ul className="relative isolate space-y-0">
         {cards.map((card, index) => {
+          const isHovered = hoveredId === card.id;
+          const hoveredIndex =
+            hoveredId != null
+              ? cards.findIndex((c) => c.id === hoveredId)
+              : -1;
           const stackOffset = index * (reduceMotion ? 0 : 12);
-          const zIndex = cards.length - index;
+          const baseZ = cards.length - index;
+          const stacksAboveHovered =
+            anyHovered && hoveredIndex >= 0 && index < hoveredIndex;
+          const zIndex = isHovered ? 1000 : stacksAboveHovered ? 1 : baseZ;
+          const animateY = isHovered ? -12 : stackOffset;
 
           return (
-            <motion.li
+            <li
               key={card.id}
-              layout
-              initial={reduceMotion ? false : { opacity: 0, y: 24 }}
-              animate={{
-                opacity: 1,
-                y: stackOffset,
-              }}
-              transition={{
-                type: "spring",
-                stiffness: 380,
-                damping: 32,
-                delay: index * 0.06,
-              }}
-              whileHover={
-                reduceMotion
+              style={{
+                zIndex,
+                position: "relative",
+                transform: `translateY(${animateY}px) scale(${isHovered ? 1.02 : 1})`,
+                transition: reduceMotion
                   ? undefined
-                  : {
-                      y: stackOffset - 6,
-                      scale: 1.012,
-                      transition: { type: "spring", stiffness: 400, damping: 28 },
-                    }
-              }
-              style={{ zIndex }}
-              className={cn(index > 0 && "-mt-8 sm:-mt-10")}
+                  : "transform 0.2s ease-out",
+              }}
+              onMouseEnter={() => setHoveredId(card.id)}
+              onMouseLeave={() => setHoveredId(null)}
+              className={cn(
+                index > 0 && !isHovered && "-mt-8 sm:-mt-10",
+                isHovered && "relative z-[1000] -mt-4 sm:-mt-6 md:mb-3",
+                stacksAboveHovered && "pointer-events-none",
+              )}
             >
-              <Link
-                href={`/cards/${card.id}`}
-                className="group block"
-              >
+              <Link href={`/cards/${card.id}`} className="group block">
                 <article
                   className={cn(
-                    "overflow-hidden rounded-[1.35rem] border border-white/60 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.35)] backdrop-blur-xl transition-shadow",
-                    "bg-white/75 dark:border-white/[0.08] dark:bg-[rgba(12,12,20,0.72)]",
-                    "hover:shadow-[0_28px_60px_-20px_rgba(109,40,217,0.28)]",
+                    "overflow-hidden rounded-[1.35rem] border backdrop-blur-xl transition-[box-shadow,border-color,transform] duration-200",
+                    isHovered
+                      ? "border-primary/35 bg-white shadow-[0_32px_70px_-18px_rgba(109,40,217,0.42)] ring-2 ring-primary/25 dark:border-primary/30 dark:bg-[rgba(12,12,20,0.96)]"
+                      : "border-white/60 bg-white/75 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.35)] dark:border-white/[0.08] dark:bg-[rgba(12,12,20,0.72)] hover:shadow-[0_28px_60px_-20px_rgba(109,40,217,0.28)]",
                   )}
                 >
-                  {/* Card face strip */}
                   <div
                     className="relative px-4 pb-3 pt-4 sm:px-5 sm:pt-5"
                     style={{
@@ -121,10 +124,7 @@ export function WalletStack({ cards }: Props) {
                     }}
                   >
                     <div className="flex items-start gap-4">
-                      <motion.div
-                        whileHover={reduceMotion ? undefined : { rotate: -2, scale: 1.03 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 22 }}
-                      >
+                      <div className="transition-transform duration-200 group-hover:scale-[1.03] group-hover:-rotate-1">
                         <CardThumbnail
                           name={card.name}
                           issuer={card.issuer}
@@ -134,11 +134,16 @@ export function WalletStack({ cards }: Props) {
                           size="lg"
                           className="shadow-2xl ring-1 ring-black/10"
                         />
-                      </motion.div>
+                      </div>
                       <div className="min-w-0 flex-1 pt-1">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <h3 className="truncate text-base font-semibold tracking-tight sm:text-lg">
+                            <h3
+                              className={cn(
+                                "text-base font-semibold tracking-tight sm:text-lg",
+                                isHovered ? "whitespace-normal" : "truncate",
+                              )}
+                            >
                               {card.name}
                             </h3>
                             <p className="mt-0.5 text-sm text-muted-foreground">
@@ -176,7 +181,6 @@ export function WalletStack({ cards }: Props) {
                     </div>
                   </div>
 
-                  {/* Details panel */}
                   <div className="border-t border-border/50 px-4 py-3.5 sm:px-5">
                     {card.walletScoreAnalyzing ? (
                       <CardIntelProgress
@@ -209,20 +213,56 @@ export function WalletStack({ cards }: Props) {
                           ))}
                         </ul>
                         {card.walletPreview.benefitsSummary && (
-                          <p className="mt-2 line-clamp-2 text-[11px] text-muted-foreground">
+                          <p
+                            className={cn(
+                              "mt-2 text-[11px] text-muted-foreground",
+                              !isHovered && "line-clamp-2",
+                            )}
+                          >
                             {card.walletPreview.benefitsSummary}
                           </p>
                         )}
-                        {card.walletPreview.statementCreditHints.length > 0 && (
-                          <ul className="mt-2.5 space-y-1">
-                            {card.walletPreview.statementCreditHints
-                              .slice(0, 3)
-                              .map((hint) => (
+                        {(card.walletPreview.statementCredits?.length ??
+                          card.walletPreview.statementCreditHints.length) > 0 && (
+                          <ul className="mt-2.5 space-y-2">
+                            {(card.walletPreview.statementCredits?.length
+                              ? card.walletPreview.statementCredits
+                              : card.walletPreview.statementCreditHints.map(
+                                  (hint) => ({
+                                    title: hint,
+                                    amountText: null,
+                                    cadence: null,
+                                    merchantHint: null,
+                                    enrollmentRequired: false,
+                                    detail: null,
+                                  }),
+                                )
+                            )
+                              .slice(0, isHovered ? undefined : 4)
+                              .map((c) => (
                                 <li
-                                  key={hint}
-                                  className="line-clamp-2 text-[11px] text-amber-900/85 dark:text-amber-100/85"
+                                  key={`${c.title}-${c.amountText}-${c.cadence}`}
+                                  className={cn(
+                                    "text-[11px] text-amber-900/85 dark:text-amber-100/85",
+                                    !isHovered && "line-clamp-3",
+                                  )}
                                 >
-                                  {hint}
+                                  <span className="font-medium text-amber-950 dark:text-amber-50">
+                                    {c.title}
+                                  </span>
+                                  {c.amountText || c.cadence ? (
+                                    <span className="text-amber-800/90 dark:text-amber-200/90">
+                                      {" "}
+                                      · {[c.amountText, c.cadence]
+                                        .filter(Boolean)
+                                        .join(" · ")}
+                                    </span>
+                                  ) : null}
+                                  {c.detail ? (
+                                    <span className="mt-0.5 block text-[10px] opacity-90">
+                                      {c.detail}
+                                    </span>
+                                  ) : null}
                                 </li>
                               ))}
                           </ul>
@@ -230,11 +270,14 @@ export function WalletStack({ cards }: Props) {
                         {card.walletPreview.protectionHints.length > 0 && (
                           <ul className="mt-2 space-y-1">
                             {card.walletPreview.protectionHints
-                              .slice(0, 2)
+                              .slice(0, isHovered ? undefined : 2)
                               .map((hint) => (
                                 <li
                                   key={hint}
-                                  className="line-clamp-2 text-[11px] text-sky-900/85 dark:text-sky-100/85"
+                                  className={cn(
+                                    "text-[11px] text-sky-900/85 dark:text-sky-100/85",
+                                    !isHovered && "line-clamp-2",
+                                  )}
                                 >
                                   {hint}
                                 </li>
@@ -250,7 +293,7 @@ export function WalletStack({ cards }: Props) {
                   </div>
                 </article>
               </Link>
-            </motion.li>
+            </li>
           );
         })}
       </ul>

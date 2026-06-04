@@ -1,6 +1,9 @@
 /** Decorative card image from accent color + last4 (no external assets). */
 
+"use client";
+
 import Image from "next/image";
+import { useState } from "react";
 
 function parseHex(hex: string): { r: number; g: number; b: number } | null {
   const n = hex.trim().replace("#", "");
@@ -94,23 +97,26 @@ export function CardThumbnail({
   imageUrl,
   highlight = false,
 }: Props) {
+  const [imgFailed, setImgFailed] = useState(false);
   const base = colorHex?.trim() || "#0f172a";
   const c1 = base;
   const c2 = shadeHex(base, 0.45);
   const d = SIZE_DIMS[size];
   const label = (issuer || name || "").trim();
   const showLabel = size !== "xs" && label.length > 0 && !imageUrl;
+  const showImage = Boolean(imageUrl?.trim()) && !imgFailed;
 
-  if (imageUrl?.trim()) {
+  if (showImage) {
     const dimClass = d.box.replace(/rounded-\S+/g, "").trim();
     return (
       <Image
-        src={imageUrl}
+        src={imageUrl!}
         alt={label || "Credit card"}
         width={172}
         height={108}
         unoptimized
-        className={`object-cover shadow-lg ring-1 ring-black/10 ${d.box} ${dimClass} ${className}`}
+        onError={() => setImgFailed(true)}
+        className={`object-contain shadow-lg ring-1 ring-black/10 ${d.box} ${dimClass} ${className}`}
       />
     );
   }

@@ -7,70 +7,19 @@ import {
   CardCatalogSuggest,
   type CatalogTemplate,
 } from "@/components/CardCatalogSuggest";
-import { CardThumbnail } from "@/components/CardThumbnail";
-import { SelectedCatalogCard } from "@/components/SelectedCatalogCard";
+import { CatalogCardArt } from "@/components/catalog-card-art";
+import { CatalogLivePreview } from "@/components/catalog-live-preview";
 import { PageHeader } from "@/components/page-header";
 import { StatusMessage } from "@/components/status-message";
 import { Button } from "@/components/ui/button";
-import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { SurfaceCard } from "@/components/ui/surface-card";
-import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
+import { apiFetch, ApiError, formatCaughtApiError, invalidateApiCache } from "@/lib/api";
+import { useAppData } from "@/lib/app-data";
 import { cn } from "@/lib/utils";
-
-function CardPreviewPanel({
-  selected,
-  pickedFromList,
-  displayName,
-  displayIssuer,
-  colorHex,
-  className,
-}: {
-  selected: CatalogTemplate | null;
-  pickedFromList: boolean;
-  displayName: string;
-  displayIssuer: string;
-  colorHex: string;
-  className?: string;
-}) {
-  if (selected && pickedFromList) {
-    return (
-      <div className={className}>
-        <SelectedCatalogCard template={selected} accentColor={colorHex} />
-      </div>
-    );
-  }
-
-  return (
-    <SurfaceCard
-      className={cn(
-        "flex flex-col items-center gap-4 p-5 text-center sm:flex-row sm:text-left lg:flex-col lg:items-center lg:text-center",
-        className,
-      )}
-    >
-      <CardThumbnail
-        name={displayName || "Your card"}
-        issuer={displayIssuer}
-        last4={null}
-        colorHex={colorHex}
-        size="lg"
-        className="shrink-0"
-      />
-      <div className="min-w-0 space-y-1">
-        <p className="truncate text-sm font-semibold tracking-tight">
-          {displayName || "Your card"}
-        </p>
-        <p className="truncate text-xs text-muted-foreground">{displayIssuer}</p>
-        <p className="text-[11px] text-muted-foreground/80">
-          Preview updates as you type or pick a suggestion.
-        </p>
-      </div>
-    </SurfaceCard>
-  );
-}
 
 export default function NewCardPage() {
   const router = useRouter();
+  const { refreshCards } = useAppData();
   const [query, setQuery] = useState("");
   const [resolved, setResolved] = useState<{
     issuer: string;
@@ -92,9 +41,13 @@ export default function NewCardPage() {
   const displayIssuer =
     pickedFromList ? issuer : (resolved?.issuer ?? issuer) || "Issuer";
 
+  const previewImageUrl = selected?.imageUrl ?? null;
+  const hasOfficialArt = Boolean(previewImageUrl?.trim());
+
   const canSubmit =
     query.trim().length >= 2 &&
     (pickedFromList || resolved !== null || catalogSlug !== null);
+
 
   const handleQueryChange = useCallback((q: string) => {
     setQuery(q);
@@ -130,7 +83,7 @@ export default function NewCardPage() {
           rawQuery: query.trim(),
           name: (pickedFromList ? name : resolved?.name ?? name).trim(),
           issuer: (pickedFromList ? issuer : resolved?.issuer ?? issuer).trim(),
-          colorHex,
+          colorHex: hasOfficialArt ? undefined : colorHex,
           catalogSlug: catalogSlug ?? undefined,
           intelAdHocFromName:
             intelAdHocFromName ||
@@ -140,6 +93,8 @@ export default function NewCardPage() {
           rules: [],
         }),
       });
+      invalidateApiCache("/cards");
+      await refreshCards(true);
       router.push("/cards");
     } catch (e) {
       if (e instanceof ApiError) setErr(formatCaughtApiError(e));
@@ -178,10 +133,10 @@ export default function NewCardPage() {
       </Button>
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
         size="lg"
         asChild
-        className="flex-1 sm:flex-none"
+        className="flex-1 text-muted-foreground sm:flex-none"
       >
         <Link href="/cards">Cancel</Link>
       </Button>
@@ -189,7 +144,7 @@ export default function NewCardPage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="mx-auto w-full max-w-6xl space-y-6">
       <div className="flex flex-wrap items-center gap-3">
         <Button variant="outline" size="sm" asChild>
           <Link href="/cards">← Back to wallet</Link>
@@ -198,11 +153,16 @@ export default function NewCardPage() {
 
       <PageHeader
         title="Add card"
-        description="Type any bank and card name. We match your bank against trusted issuers and pull rewards when possible."
+        description="Search the catalog, see rewards and card art live, then save to your wallet."
       />
 
-      <form onSubmit={submit} className="space-y-5 pb-24 md:pb-0">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start lg:gap-6">
+      <form onSubmit={submit} className="space-y-6 pb-24 md:pb-8">
+        <div
+          className={cn(
+            "grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] lg:items-start",
+            suggestionsOpen && "lg:grid-cols-1",
+          )}
+        >
           <div className="min-w-0 space-y-5">
             <CardCatalogSuggest
               onApply={applyCatalog}
@@ -211,43 +171,68 @@ export default function NewCardPage() {
               onOpenChange={setSuggestionsOpen}
             />
 
-            <SurfaceCard className="p-4">
-              <Field label="Accent color">
-                <Input
-                  type="color"
-                  className="h-10 max-w-xs cursor-pointer p-1"
-                  value={colorHex}
-                  onChange={(e) => setColorHex(e.target.value)}
-                />
-              </Field>
-            </SurfaceCard>
-
             {err ? <StatusMessage variant="error">{err}</StatusMessage> : null}
 
-            <div className="hidden flex-wrap gap-3 md:flex">{actionButtons}</div>
+            {!suggestionsOpen ? (
+              <div className="hidden flex-wrap gap-3 md:flex">{actionButtons}</div>
+            ) : null}
           </div>
 
-          <CardPreviewPanel
-            selected={selected}
-            pickedFromList={pickedFromList}
-            displayName={displayName}
-            displayIssuer={displayIssuer}
-            colorHex={colorHex}
-            className={cn(
-              "lg:sticky lg:top-24",
-              suggestionsOpen && "hidden lg:block",
-            )}
-          />
+          {!suggestionsOpen && (
+            <div className="min-w-0 lg:sticky lg:top-24">
+              {catalogSlug ? (
+                <CatalogLivePreview
+                  catalogSlug={catalogSlug}
+                  fallbackName={displayName}
+                  fallbackIssuer={displayIssuer}
+                  fallbackImageUrl={previewImageUrl}
+                  fallbackColorHex={colorHex}
+                  intelQueuedAfterSave={
+                    intelAdHocFromName ||
+                    (!catalogSlug && (resolved?.trustedIssuer ?? false))
+                  }
+                />
+              ) : (
+                <SurfaceCard className="overflow-hidden p-0">
+                  <div className="border-b border-border/60 bg-gradient-to-b from-violet-500/[0.06] to-transparent px-5 py-6">
+                    <CatalogCardArt
+                      name={displayName || "Your card"}
+                      issuer={displayIssuer}
+                      imageUrl={previewImageUrl}
+                      colorHex={colorHex}
+                      variant="hero"
+                    />
+                    <div className="mt-4 space-y-1 text-center">
+                      <h2 className="text-lg font-semibold tracking-tight">
+                        {displayName || "Your card"}
+                      </h2>
+                      <p className="text-sm text-muted-foreground">{displayIssuer}</p>
+                    </div>
+                  </div>
+                  <div className="px-5 py-4">
+                    <StatusMessage variant="info">
+                      <p className="text-sm">
+                        Pick a catalog card or keep typing to match your bank. Rewards
+                        and official card art appear here when available.
+                      </p>
+                    </StatusMessage>
+                  </div>
+                </SurfaceCard>
+              )}
+            </div>
+          )}
         </div>
 
-        <div
-          className={cn(
-            "fixed inset-x-0 z-40 border-t border-border/80 bg-background/90 px-4 py-3 backdrop-blur-xl",
-            "bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))] md:hidden",
-          )}
-        >
-          <div className="mx-auto flex max-w-3xl gap-2">{actionButtons}</div>
-        </div>
+        {!suggestionsOpen ? (
+          <div
+            className={cn(
+              "fixed inset-x-0 z-30 border-t border-border bg-background px-4 py-3 shadow-[0_-8px_30px_-12px_rgba(0,0,0,0.25)]",
+              "bottom-[calc(5.25rem+env(safe-area-inset-bottom,0px))] md:hidden",
+            )}
+          >
+            <div className="mx-auto flex w-full max-w-6xl gap-2">{actionButtons}</div>
+          </div>
+        ) : null}
       </form>
     </div>
   );

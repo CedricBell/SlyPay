@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import {
+  enrichCatalogEntry,
+  mergeCatalogEntries,
+} from "@/server/catalog-card-art";
 import type { CardCatalogEntry } from "./card-catalog.types";
 import { searchCardCatalog } from "./card-catalog-search";
 import { isAdHocCatalogIntelEligible } from "./catalog-intel-eligibility";
@@ -27,6 +31,11 @@ function maybePrependTypedCatalogSuggestion(
     return merged.slice(0, cap);
   }
 
+  const staticMatch = searchCardCatalog(qt, 1)[0];
+  if (staticMatch && !staticMatch.id.startsWith("adhoc-")) {
+    return merged.slice(0, cap);
+  }
+
   const inferred = inferIssuerAndProductNameDetailed(qt);
   if (!inferred) return merged.slice(0, cap);
 
@@ -41,7 +50,7 @@ function maybePrependTypedCatalogSuggestion(
     intelAdHocFromName: true,
   };
 
-  return [synthetic, ...merged].slice(0, cap);
+  return [...merged, synthetic].slice(0, cap);
 }
 
 export { searchCardCatalog, searchCardCatalogScored } from "./card-catalog-search";
@@ -72,8 +81,15 @@ export async function searchCardCatalogMerged(
         rules: [],
       }));
       const byId = new Map<string, CardCatalogEntry>();
-      for (const e of [...dbEntries, ...staticHits]) {
-        if (!byId.has(e.id)) byId.set(e.id, e);
+      for (const e of staticHits) {
+        byId.set(e.id, enrichCatalogEntry(e));
+      }
+      for (const e of dbEntries) {
+        const prev = byId.get(e.id);
+        byId.set(
+          e.id,
+          prev ? mergeCatalogEntries(enrichCatalogEntry(e), prev) : enrichCatalogEntry(e),
+        );
       }
       return [...byId.values()].slice(0, cap);
     } catch {
@@ -107,8 +123,15 @@ export async function searchCardCatalogMerged(
     }));
 
     const byId = new Map<string, CardCatalogEntry>();
-    for (const e of [...dbEntries, ...staticHits]) {
-      if (!byId.has(e.id)) byId.set(e.id, e);
+    for (const e of staticHits) {
+      byId.set(e.id, enrichCatalogEntry(e));
+    }
+    for (const e of dbEntries) {
+      const prev = byId.get(e.id);
+      byId.set(
+        e.id,
+        prev ? mergeCatalogEntries(enrichCatalogEntry(e), prev) : enrichCatalogEntry(e),
+      );
     }
     return maybePrependTypedCatalogSuggestion(q, [...byId.values()], cap);
   } catch {

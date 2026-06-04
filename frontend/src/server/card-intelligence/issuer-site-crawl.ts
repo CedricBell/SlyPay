@@ -5,6 +5,7 @@ import {
   fetchIssuerHtml,
 } from "@/server/card-intelligence/issuer-html-links";
 import {
+  isAncillaryIssuerFeaturePath,
   pathBonusForIntelDocument,
   looksLikeOfficialTermsHtmlPath,
 } from "@/server/card-intelligence/intel-path-bonus";
@@ -92,6 +93,10 @@ export async function harvestIssuerSiteLinks(args: {
             pathL.includes("benefit") ||
             pathL.includes("reward") ||
             pathL.endsWith(".pdf");
+
+          if (isAncillaryIssuerFeaturePath(pathL)) {
+            continue;
+          }
 
           if (!looksTerms) {
             const nameMatch = tokens.some((t) => pathL.includes(t));

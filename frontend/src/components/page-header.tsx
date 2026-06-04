@@ -26,9 +26,9 @@ export function PageHeader({
         {title}
       </h1>
       {description ? (
-        <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+        <div className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
           {description}
-        </p>
+        </div>
       ) : null}
       {children}
     </div>

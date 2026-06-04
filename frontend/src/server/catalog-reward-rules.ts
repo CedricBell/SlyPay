@@ -1,7 +1,7 @@
 import { EarningType, type Prisma } from "@prisma/client";
 import { applyBenefitsFromExtract } from "@/server/catalog-benefits";
-import { mapExtractToRewardRules } from "@/server/card-intelligence/map-extract-to-reward-rules";
-import { rewardsExtractSchema } from "@/server/card-intelligence/rewards-extract-schema";
+import { buildRewardRuleDraftsFromExtract } from "@/server/card-intelligence/build-reward-rule-drafts";
+import { parseRewardsExtract } from "@/server/card-intelligence/rewards-extract-schema";
 import {
   sanitizeRewardRuleDrafts,
   type RewardRuleDraft,
@@ -13,13 +13,12 @@ export async function rewardRulesFromCatalogExtract(product: {
   lastExtractJson: unknown;
 }): Promise<RewardRuleDraft[] | null> {
   if (product.lastExtractJson == null) return null;
-  const extract = rewardsExtractSchema.parse(product.lastExtractJson);
-  const drafts = await mapExtractToRewardRules({
+  const extract = parseRewardsExtract(product.lastExtractJson);
+  return buildRewardRuleDraftsFromExtract({
     productName: product.name,
     issuer: product.issuer,
     extract,
   });
-  return sanitizeRewardRuleDrafts(drafts);
 }
 
 export async function applyRewardRulesToCatalogProduct(
@@ -49,7 +48,7 @@ export async function applyExtractSnapshotToCatalog(
   extract: unknown,
   sanitized: RewardRuleDraft[],
 ): Promise<void> {
-  const parsed = rewardsExtractSchema.parse(extract);
+  const parsed = parseRewardsExtract(extract);
   await applyRewardRulesToCatalogProduct(tx, catalogProductSlug, sanitized);
   await applyBenefitsFromExtract(tx, catalogProductSlug, parsed);
 }
@@ -73,6 +72,31 @@ export async function applyCatalogRulesIfMissing(
 
   await applyRewardRulesToCatalogProduct(tx, catalogSlug, sanitized);
   return true;
+}
+
+export function extractHasEarnRates(lastExtractJson: unknown): boolean {
+  if (lastExtractJson == null) return false;
+  try {
+    return parseRewardsExtract(lastExtractJson).earnRates.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Catalog intel is reusable for the next wallet card when rules exist or extract has earn rates. */
+export function catalogRewardsReady(
+  product: {
+    lastExtractHash: string | null;
+    lastExtractJson: unknown;
+  } | null,
+  rewardRuleCount: number,
+): boolean {
+  if (rewardRuleCount > 0) return true;
+  return Boolean(
+    product?.lastExtractHash &&
+      product.lastExtractJson != null &&
+      extractHasEarnRates(product.lastExtractJson),
+  );
 }
 
 export function catalogExtractIsReady(product: {

@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { stableAdHocCatalogSlug } from "@/server/catalog-infer";
+import { resolveCatalogImageUrl } from "@/server/catalog-card-art";
+import { resolveAndPersistCatalogImage } from "@/server/catalog-card-image";
 import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 
 /** Upserts one row in `CardCatalogProduct` from the in-repo catalog (slug = entry id). */
@@ -9,32 +11,48 @@ export async function upsertCatalogProductFromSlug(slug: string) {
   if (!entry) return null;
 
   const docUrl = entry.officialDocumentUrl ?? null;
+  const imageUrl =
+    resolveCatalogImageUrl(entry.id, { imageUrl: entry.imageUrl }) ??
+    entry.imageUrl ??
+    null;
   const rotating = entry.rotatingBonusCalendar;
   const rotatingJson: Prisma.InputJsonValue | typeof Prisma.JsonNull =
     rotating && rotating.length > 0
       ? (rotating as Prisma.InputJsonValue)
       : Prisma.JsonNull;
 
-  return prisma.cardCatalogProduct.upsert({
+  const officialUrl = docUrl ?? entry.officialDocumentUrl ?? null;
+
+  const row = await prisma.cardCatalogProduct.upsert({
     where: { slug: entry.id },
     create: {
       slug: entry.id,
       name: entry.name,
       issuer: entry.issuer,
       colorHex: entry.colorHex ?? null,
-      imageUrl: entry.imageUrl ?? null,
-      officialDocumentUrl: docUrl,
+      imageUrl,
+      officialDocumentUrl: officialUrl,
       rotatingBonusCalendar: rotatingJson,
     },
     update: {
       name: entry.name,
       issuer: entry.issuer,
       colorHex: entry.colorHex ?? null,
-      imageUrl: entry.imageUrl ?? null,
-      ...(docUrl ? { officialDocumentUrl: docUrl } : {}),
+      imageUrl,
+      ...(officialUrl ? { officialDocumentUrl: officialUrl } : {}),
       rotatingBonusCalendar: rotatingJson,
     },
   });
+
+  await resolveAndPersistCatalogImage({
+    productSlug: entry.id,
+    issuer: entry.issuer,
+    cardName: entry.name,
+    currentImageUrl: row.imageUrl,
+    officialDocumentUrl: row.officialDocumentUrl,
+  }).catch(() => undefined);
+
+  return prisma.cardCatalogProduct.findUniqueOrThrow({ where: { slug: entry.id } });
 }
 
 /**

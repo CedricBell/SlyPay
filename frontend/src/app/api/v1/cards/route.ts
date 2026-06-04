@@ -1,20 +1,22 @@
 import { EarningType, SpendCategory } from "@prisma/client";
 import { after, NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { walletCardInclude } from "@/lib/credit-card-rules";
+import { walletCardInclude, walletCardListInclude } from "@/lib/credit-card-rules";
 import { getSessionAppUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
 import { mapCreditCardJson } from "@/lib/map-credit-card";
 import { runCardIntelJob } from "@/server/card-intelligence/run-intel-job";
 import {
   applyCatalogRulesIfMissing,
-  catalogExtractIsReady,
+  catalogRewardsReady,
 } from "@/server/catalog-reward-rules";
 import {
   ensureAdHocCatalogProduct,
   resolveCatalogProductFromSlug,
 } from "@/server/catalog-db-sync";
+import { resolveAndPersistCatalogImage } from "@/server/catalog-card-image";
 import { isAdHocCatalogIntelEligible } from "@/server/catalog-intel-eligibility";
+import { matchStaticCatalogSlug } from "@/server/catalog-infer";
 import { resolveUserCardInput } from "@/server/wallet-card-resolve";
 
 const createBody = z.object({
@@ -36,7 +38,7 @@ export async function GET() {
   const rows = await prisma.creditCard.findMany({
     where: { userId: ctx.appUser.id },
     orderBy: { createdAt: "desc" },
-    include: walletCardInclude,
+    include: walletCardListInclude,
   });
   return NextResponse.json(rows.map((c) => mapCreditCardJson(c)));
 }
@@ -87,18 +89,38 @@ export async function POST(req: NextRequest) {
       );
     }
     catalogSlug = row.slug;
+    const imageUrl = await resolveAndPersistCatalogImage({
+      productSlug: row.slug,
+      issuer: row.issuer,
+      cardName: row.name,
+      currentImageUrl: row.imageUrl,
+      officialDocumentUrl: row.officialDocumentUrl,
+    });
+    if (imageUrl && imageUrl !== row.imageUrl) {
+      await prisma.cardCatalogProduct.update({
+        where: { slug: row.slug },
+        data: { imageUrl },
+      });
+    }
   } else if (runIntelAdHoc) {
     const lookupQuery = rawQuery || `${issuer} ${name}`.trim();
     if (!isAdHocCatalogIntelEligible(lookupQuery)) {
       runIntelAdHoc = false;
     }
     if (runIntelAdHoc) {
-      const row = await ensureAdHocCatalogProduct({
-        name,
-        issuer,
-        colorHex: body.colorHex ?? null,
-      });
-      catalogSlug = row.slug;
+      const staticSlug = matchStaticCatalogSlug(issuer, name);
+      if (staticSlug) {
+        const row = await resolveCatalogProductFromSlug(staticSlug);
+        if (row) catalogSlug = row.slug;
+      }
+      if (!catalogSlug) {
+        const row = await ensureAdHocCatalogProduct({
+          name,
+          issuer,
+          colorHex: body.colorHex ?? null,
+        });
+        catalogSlug = row.slug;
+      }
     }
   }
 
@@ -126,17 +148,35 @@ export async function POST(req: NextRequest) {
 
   let catalogIntelQueued = false;
   if (catalogSlug) {
-    const product = await prisma.cardCatalogProduct.findUnique({
-      where: { slug: catalogSlug },
-      select: { lastExtractHash: true, lastExtractJson: true },
-    });
-    catalogIntelQueued = !catalogExtractIsReady(product);
+    const [product, ruleCount, lastJob] = await Promise.all([
+      prisma.cardCatalogProduct.findUnique({
+        where: { slug: catalogSlug },
+        select: { lastExtractHash: true, lastExtractJson: true },
+      }),
+      prisma.rewardRule.count({ where: { catalogProductSlug: catalogSlug } }),
+      prisma.cardIntelJob.findFirst({
+        where: { productSlug: catalogSlug },
+        orderBy: { createdAt: "desc" },
+        select: { status: true },
+      }),
+    ]);
 
-    if (catalogIntelQueued) {
+    const rewardsReady = catalogRewardsReady(product, ruleCount);
+    catalogIntelQueued = !rewardsReady;
+
+    const shouldRunIntel =
+      !rewardsReady ||
+      lastJob?.status === "FAILED" ||
+      (lastJob?.status === "COMPLETED" && ruleCount === 0);
+
+    if (shouldRunIntel) {
       after(async () => {
         await runCardIntelJob({
           productSlug: catalogSlug,
           creditCardId: card.id,
+          forceReanalyze:
+            lastJob?.status === "FAILED" ||
+            (Boolean(product?.lastExtractHash) && ruleCount === 0),
         });
       });
     }

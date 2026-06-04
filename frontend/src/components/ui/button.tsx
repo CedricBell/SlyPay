@@ -20,7 +20,7 @@ const buttonVariants = cva(
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "text-primary underline-offset-4 hover:underline",
         gradient:
-          "animate-gradient-shift rounded-2xl bg-[length:200%_auto] bg-gradient-to-r from-violet-600 via-blue-500 to-violet-600 font-semibold text-white shadow-lg shadow-violet-500/25 transition-[filter,transform] hover:brightness-110 hover:shadow-violet-500/35 active:scale-[0.98]",
+          "animate-gradient-shift rounded-2xl border-0 bg-[length:200%_auto] bg-gradient-to-r from-violet-600 via-blue-500 to-violet-600 font-semibold text-white shadow-lg shadow-violet-500/30 transition-[filter,transform,box-shadow] hover:brightness-110 hover:shadow-violet-500/40 active:scale-[0.98] focus-visible:border-0 focus-visible:ring-2 focus-visible:ring-violet-500/45 focus-visible:ring-offset-0",
         pill: "rounded-full border-border bg-background font-semibold shadow-sm hover:bg-muted",
         nav: "rounded-xl border border-transparent font-medium text-muted-foreground hover:border-border hover:bg-muted/60",
         navActive:

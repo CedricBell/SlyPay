@@ -9,15 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SurfaceCard } from "@/components/ui/surface-card";
 
-type ScoreBreakdown = {
-  grossRewardsUsd: number;
-  statementCreditsUsd: number;
-  annualFeeUsd: number;
-  netValueUsd: number;
-  scoreOutOf100: number;
-  spendProfileLabel: string;
-};
-
 type IntelJob = {
   status: string;
   createdAt: string;
@@ -34,8 +25,6 @@ type Row = {
   hasCatalogExtract: boolean;
   catalogLastFetchedAt: string | null;
   rewardRuleCount: number;
-  catalogScore: number;
-  scoreBreakdown: ScoreBreakdown;
   rulePreview: string[];
   latestIntelJob: IntelJob | null;
   updatedAt: string;
@@ -115,12 +104,11 @@ export default function AdminCreditCardsPage() {
       ) : null}
 
       <SurfaceCard className="overflow-x-auto p-0">
-        <table className="w-full min-w-[1080px] text-left text-sm">
+        <table className="w-full min-w-[920px] text-left text-sm">
           <thead className="border-b border-border bg-muted/40">
             <tr>
               <th className="px-3 py-2 font-medium">Produit catalogue</th>
               <th className="px-3 py-2 font-medium">Exemplaires</th>
-              <th className="px-3 py-2 font-medium">Score</th>
               <th className="px-3 py-2 font-medium">Extrait PDF</th>
               <th className="px-3 py-2 font-medium">Règles</th>
               <th className="px-3 py-2 font-medium">Job intel</th>
@@ -142,21 +130,6 @@ export default function AdminCreditCardsPage() {
                   <p className="mt-0.5 text-[10px] text-muted-foreground">
                     portefeuilles utilisateur
                   </p>
-                </td>
-                <td className="px-3 py-2 text-xs">
-                  {r.rewardRuleCount === 0 ? (
-                    <span className="text-muted-foreground">—</span>
-                  ) : (
-                    <>
-                      <span className="text-lg font-semibold text-violet-700 dark:text-violet-300">
-                        {r.catalogScore}
-                        <span className="text-sm font-normal text-muted-foreground">/100</span>
-                      </span>
-                      <p className="mt-1 max-w-[160px] text-[10px] leading-snug text-muted-foreground">
-                        net ${r.scoreBreakdown.netValueUsd.toFixed(2)}/mo
-                      </p>
-                    </>
-                  )}
                 </td>
                 <td className="px-3 py-2 text-xs">
                   {r.hasCatalogExtract ? (

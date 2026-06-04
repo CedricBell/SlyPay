@@ -134,6 +134,65 @@
   .animate-gradient-shift {
     animation: gradient-shift 5s ease infinite;
   }
+
+}
+
+@keyframes border-beam-spin {
+  from {
+    transform: translate3d(-50%, -50%, 0) rotate(0deg);
+  }
+  to {
+    transform: translate3d(-50%, -50%, 0) rotate(360deg);
+  }
+}
+
+/* GPU-friendly border highlight (no offset-path). */
+.border-beam {
+  contain: paint;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+  padding: var(--border-beam-width, 1.5px);
+}
+
+.border-beam-glow {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 200%;
+  aspect-ratio: 1;
+  transform: translate3d(-50%, -50%, 0);
+  transform-origin: center center;
+  will-change: transform;
+  backface-visibility: hidden;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    transparent 248deg,
+    var(--border-beam-from, #7c3aed) 272deg,
+    var(--border-beam-to, #2563eb) 292deg,
+    transparent 316deg
+  );
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .border-beam-glow {
+    animation: border-beam-spin var(--border-beam-duration, 10s) linear infinite;
+    animation-delay: var(--border-beam-delay, 0s);
+  }
+}
+
+.border-beam-glow-reverse {
+  animation-direction: reverse;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .border-beam-glow {
+    animation: none;
+    opacity: 0.7;
+  }
 }
 
 body {
@@ -151,5 +210,52 @@ body {
 :focus-visible {
   outline: 2px solid color-mix(in srgb, var(--ring) 45%, transparent);
   outline-offset: 2px;
+}
+
+@keyframes app-aurora-drift-a {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(60px, 40px) scale(1.06);
+  }
+}
+
+@keyframes app-aurora-drift-b {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-50px, 55px) scale(0.96);
+  }
+}
+
+@keyframes app-aurora-drift-c {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(35px, -30px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-aurora-violet {
+    background: radial-gradient(circle at center, #7c3aed 0%, transparent 68%);
+    animation: app-aurora-drift-a 22s ease-in-out infinite;
+  }
+
+  .app-aurora-blue {
+    background: radial-gradient(circle at center, #2563eb 0%, transparent 68%);
+    animation: app-aurora-drift-b 26s ease-in-out infinite;
+  }
+
+  .app-aurora-lilac {
+    background: radial-gradient(circle at center, #a78bfa 0%, transparent 68%);
+    animation: app-aurora-drift-c 20s ease-in-out infinite;
+  }
 }
 

@@ -1,4 +1,5 @@
 import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
+import { isAncillaryIssuerFeaturePath } from "@/server/card-intelligence/intel-path-bonus";
 
 const PRODUCT_STOPWORDS = new Set([
   "card",
@@ -125,11 +126,15 @@ export function buildIssuerScopedSearchQuery(args: {
     .filter((t) => t.length >= 3)
     .map((t) => `-${t}`)
     .join(" ");
+  const junkNeg =
+    "-free-credit-score -features-benefits -mycreditguide -unifiedlandingpage -cardmember-agreements -company/legal";
   return [
     `(${siteClause})`,
     phrase,
+    '"credit card"',
     INTEL_DOC_HUMAN_INTENT,
     neg,
+    junkNeg,
   ]
     .filter(Boolean)
     .join(" ")
@@ -256,5 +261,21 @@ export function scorePdfCandidate(args: {
   }
 
   s += Math.max(0, 40 - args.resultIndex);
+
+  try {
+    const u = new URL(args.url);
+    if (isAncillaryIssuerFeaturePath(u.pathname + u.search)) {
+      s -= 140;
+    }
+    if (
+      /\/credit-cards\/card\/[^/]+\/?$/i.test(u.pathname) &&
+      /americanexpress\.com/i.test(u.hostname)
+    ) {
+      s += 85;
+    }
+  } catch {
+    /* */
+  }
+
   return s;
 }

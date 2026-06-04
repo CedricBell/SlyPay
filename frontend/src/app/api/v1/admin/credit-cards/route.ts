@@ -3,8 +3,6 @@ import { requireAdmin } from "@/lib/api-auth";
 import { catalogProductAdminInclude } from "@/lib/credit-card-rules";
 import { prisma } from "@/lib/prisma";
 import { dec } from "@/lib/serialize";
-import { computeWalletScore } from "@/lib/wallet-score";
-
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin();
   if (!auth.ok) return auth.response;
@@ -32,20 +30,6 @@ export async function GET(req: NextRequest) {
     const errSnippet = job?.errorMessage
       ? job.errorMessage.replace(/\s+/g, " ").slice(0, 120)
       : null;
-    const extractJson =
-      product.lastExtractJson != null ? product.lastExtractJson : null;
-    const calJson = product.rotatingBonusCalendar ?? null;
-    const { total: catalogScore, breakdown: scoreBreakdown } = computeWalletScore(
-      product.rewardRules,
-      extractJson,
-      {
-        cardId: product.slug,
-        cardName: product.name,
-        issuer: product.issuer,
-        offers: [],
-        rotatingBonusCalendar: calJson,
-      },
-    );
     const previewRules = product.rewardRules.slice(0, 10);
     return {
       slug: product.slug,
@@ -56,8 +40,6 @@ export async function GET(req: NextRequest) {
       hasCatalogExtract: Boolean(product.lastExtractHash),
       catalogLastFetchedAt: product.lastFetchedAt?.toISOString() ?? null,
       rewardRuleCount: product.rewardRules.length,
-      catalogScore,
-      scoreBreakdown,
       rulePreview: previewRules.map(
         (r) => `${r.category} ${dec(r.multiplier)}× (${r.earningType})`,
       ),

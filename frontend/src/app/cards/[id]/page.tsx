@@ -12,21 +12,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SurfaceCard } from "@/components/ui/surface-card";
 import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
+import { intelHasFailed } from "@/lib/card-intel-status";
+import type { MappedIntelJob } from "@/lib/map-credit-card";
+import type { StatementCreditDisplay } from "@/lib/statement-credit-display";
 
 type WalletPreview = {
   ruleHighlights: string[];
   pdfSummary: string | null;
   benefitsSummary: string | null;
   statementCreditHints: string[];
+  statementCredits?: StatementCreditDisplay[];
   protectionHints: string[];
-  scoreBreakdown?: {
-    grossRewardsUsd: number;
-    statementCreditsUsd: number;
-    annualFeeUsd: number;
-    netValueUsd: number;
-    scoreOutOf100: number;
-    spendProfileLabel: string;
-  };
 };
 
 type CardDetail = {
@@ -49,8 +45,8 @@ type CardDetail = {
   hasOfficialPdfExtract?: boolean;
   officialDocumentUrl?: string | null;
   walletPreview?: WalletPreview;
-  walletScore?: number;
   walletScoreAnalyzing?: boolean;
+  intelJob?: MappedIntelJob | null;
 };
 
 export default function EditCardPage() {
@@ -68,11 +64,12 @@ export default function EditCardPage() {
     officialDocumentUrl: string | null;
     hasOfficialPdfExtract: boolean;
     walletPreview: WalletPreview | undefined;
-    walletScore: number | undefined;
     walletScoreAnalyzing?: boolean;
   } | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [intelJob, setIntelJob] = useState<MappedIntelJob | null>(null);
+  const [refreshingIntel, setRefreshingIntel] = useState(false);
   const [init, setInit] = useState(false);
 
   useEffect(() => {
@@ -86,12 +83,12 @@ export default function EditCardPage() {
         setIsActive(c.isActive);
         setRules(c.rewardRules);
         setCatalogImageUrl(c.catalogImageUrl ?? null);
+        setIntelJob(c.intelJob ?? null);
         setIntel({
           catalogSlug: c.catalogSlug ?? null,
           officialDocumentUrl: c.officialDocumentUrl ?? null,
           hasOfficialPdfExtract: Boolean(c.hasOfficialPdfExtract),
           walletPreview: c.walletPreview,
-          walletScore: c.walletScore,
           walletScoreAnalyzing: c.walletScoreAnalyzing,
         });
         setInit(true);
@@ -121,6 +118,28 @@ export default function EditCardPage() {
       else setErr("Failed to save");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshIntel = async () => {
+    setErr(null);
+    setRefreshingIntel(true);
+    try {
+      await apiFetch(`/cards/${id}/refresh-intel`, { method: "POST" });
+      setIntelJob({
+        status: "PENDING",
+        errorMessage: null,
+        startedAt: null,
+        createdAt: new Date().toISOString(),
+      });
+      setIntel((prev) =>
+        prev ? { ...prev, walletScoreAnalyzing: true } : prev,
+      );
+    } catch (e) {
+      if (e instanceof ApiError) setErr(formatCaughtApiError(e));
+      else setErr("Could not restart rewards lookup");
+    } finally {
+      setRefreshingIntel(false);
     }
   };
 
@@ -210,12 +229,25 @@ export default function EditCardPage() {
             intel.hasOfficialPdfExtract) && (
             <SurfaceCard className="border-violet-500/30 bg-violet-500/5 p-4 text-sm">
               <p className="font-semibold text-primary">Catalog intelligence</p>
+              {intelHasFailed(intelJob) ? (
+                <div className="mt-3 space-y-2">
+                  <StatusMessage variant="error">
+                    {intelJob?.errorMessage?.slice(0, 200) ??
+                      "Rewards lookup failed."}
+                  </StatusMessage>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={refreshingIntel}
+                    onClick={() => void refreshIntel()}
+                  >
+                    {refreshingIntel ? "Retrying…" : "Retry rewards lookup"}
+                  </Button>
+                </div>
+              ) : null}
               {intel.walletScoreAnalyzing ? (
                 <p className="mt-2 text-muted-foreground">Analyzing rewards…</p>
-              ) : intel.walletScore != null ? (
-                <p className="mt-2 text-muted-foreground">
-                  Score {Math.round(intel.walletScore)}/100
-                </p>
               ) : null}
               {intel.officialDocumentUrl ? (
                 <Button variant="link" className="mt-2 h-auto p-0" asChild>
@@ -264,14 +296,46 @@ export default function EditCardPage() {
                 {intel.walletPreview.benefitsSummary}
               </p>
             ) : null}
-            {intel.walletPreview.statementCreditHints.length > 0 && (
+            {(intel.walletPreview.statementCredits?.length ??
+              intel.walletPreview.statementCreditHints.length) > 0 && (
               <div className="mt-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Statement credits
                 </p>
-                <ul className="mt-1.5 space-y-1">
-                  {intel.walletPreview.statementCreditHints.map((hint) => (
-                    <li key={hint}>{hint}</li>
+                <ul className="mt-2 space-y-3">
+                  {(intel.walletPreview.statementCredits?.length
+                    ? intel.walletPreview.statementCredits
+                    : intel.walletPreview.statementCreditHints.map((hint) => ({
+                        title: hint,
+                        amountText: null,
+                        cadence: null,
+                        merchantHint: null,
+                        enrollmentRequired: false,
+                        detail: null,
+                      }))
+                  ).map((c) => (
+                    <li key={`${c.title}-${c.amountText}-${c.cadence}`}>
+                      <p className="font-medium text-foreground">{c.title}</p>
+                      {(c.amountText || c.cadence) && (
+                        <p className="mt-0.5 text-muted-foreground">
+                          {[c.amountText, c.cadence].filter(Boolean).join(" · ")}
+                        </p>
+                      )}
+                      {c.merchantHint &&
+                      !c.title.toLowerCase().includes(c.merchantHint.toLowerCase()) ? (
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {c.merchantHint}
+                        </p>
+                      ) : null}
+                      {c.detail ? (
+                        <p className="mt-0.5 text-xs text-muted-foreground">{c.detail}</p>
+                      ) : null}
+                      {c.enrollmentRequired ? (
+                        <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-200">
+                          Enrollment required
+                        </p>
+                      ) : null}
+                    </li>
                   ))}
                 </ul>
               </div>

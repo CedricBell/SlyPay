@@ -5,7 +5,8 @@ import { normalizeIssuer } from "@/server/card-intelligence/issuer-official-doma
 /** Curated Amex marketing paths (slug tail ≠ URL path). */
 const AMEX_CARD_PATHS: Record<string, string> = {
   gold: "gold-card",
-  platinum: "platinum-card",
+  /** Marketing URL is /card/platinum/ (not platinum-card). */
+  platinum: "platinum",
   green: "green-card",
   "blue-cash-preferred": "blue-cash-preferred",
   "blue-cash-everyday": "blue-cash-everyday",
@@ -88,6 +89,30 @@ function guessGenericProductPageUrls(
   return [...new Set(urls)];
 }
 
+/** Marketing URLs from card name tokens (adhoc slugs, user-typed labels). */
+export function guessAmexProductPageUrlsFromCardName(cardName: string): string[] {
+  const lower = cardName
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+  const urls: string[] = [];
+  for (const [key, pathSeg] of Object.entries(AMEX_CARD_PATHS)) {
+    const token = key.replace(/-/g, "[\\s-]+");
+    if (new RegExp(`\\b${token}\\b`).test(lower)) {
+      urls.push(
+        `https://www.americanexpress.com/us/credit-cards/card/${pathSeg}/`,
+        `https://www.americanexpress.com/en-us/credit-cards/card/${pathSeg}/`,
+      );
+    }
+  }
+  if (/\bplatinum\b/.test(lower) && !urls.length) {
+    urls.push(
+      "https://www.americanexpress.com/us/credit-cards/card/platinum/",
+    );
+  }
+  return [...new Set(urls)];
+}
+
 function amexCardPath(productSlug: string, tail: string): string {
   const entry = CARD_CATALOG_ENTRIES.find((e) => e.id === productSlug);
   if (entry?.officialDocumentUrl) {
@@ -122,6 +147,9 @@ export function guessIssuerProductPageUrls(
 
   if (!tail) {
     if (cardName?.trim()) {
+      if (key.includes("american express") || key === "amex") {
+        urls.push(...guessAmexProductPageUrlsFromCardName(cardName));
+      }
       urls.push(...guessGenericProductPageUrls(issuer, cardName));
     }
     return [...new Set(urls)];
@@ -148,6 +176,9 @@ export function guessIssuerProductPageUrls(
       `https://www.americanexpress.com/en-us/credit-cards/card/${cardPath}/`,
       `https://www.americanexpress.com/us/credit-cards/card/${cardPath}/apply/terms/`,
     );
+    if (cardName?.trim()) {
+      urls.push(...guessAmexProductPageUrlsFromCardName(cardName));
+    }
   }
 
   if (key.includes("discover")) {

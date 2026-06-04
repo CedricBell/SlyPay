@@ -1,6 +1,7 @@
 import { CardBenefitKind, type Prisma, SpendCategory } from "@prisma/client";
 import type { RewardsExtract } from "@/server/card-intelligence/rewards-extract-schema";
 import { spendCategoryFromHint } from "@/server/card-intelligence/rewards-extract-schema";
+import { resolveStatementCreditTitle } from "@/lib/statement-credit-display";
 
 export async function applyBenefitsFromExtract(
   tx: Prisma.TransactionClient,
@@ -13,11 +14,17 @@ export async function applyBenefitsFromExtract(
   let priority = 0;
 
   for (const sc of extract.statementCredits) {
+    const title = resolveStatementCreditTitle(sc);
     rows.push({
       catalogProductSlug,
       kind: CardBenefitKind.STATEMENT_CREDIT,
-      title: sc.description.trim(),
-      description: sc.description.trim(),
+      title,
+      description:
+        sc.merchantHint?.trim() ||
+        sc.categoryHint?.trim() ||
+        sc.description.trim() !== title
+          ? sc.description.trim()
+          : null,
       amountText: sc.amountText?.trim() ?? null,
       cadence: sc.cadence?.trim() ?? null,
       merchantHint: sc.merchantHint?.trim() ?? null,

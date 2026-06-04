@@ -1,6 +1,6 @@
 import { cardIntelCompleteJson } from "@/server/card-intelligence/card-intel-llm";
 import {
-  rewardsExtractSchema,
+  parseRewardsExtract,
   type RewardsExtract,
 } from "@/server/card-intelligence/rewards-extract-schema";
 
@@ -14,7 +14,7 @@ Rules:
 - summary: 2–5 factual sentences on earn + headline perks.
 - benefitsSummary: 2–4 sentences on purchase/travel protections, insurance, lounge/status, and non-earn perks (e.g. phone protection, rental car coverage).
 - earnRates: each earning structure with categoryHint mirroring document wording. Put merchant exclusions (Target, Walmart, Costco, etc.) in excludedMerchants[] for that rate — NOT only in caveats.
-- statementCredits: ALL recurring credits (hotel/resort/airline/travel/dining/retail/Uber/Digital Entertainment, etc.) with amountText, cadence, merchantHint when named (e.g. Hilton, Saks, airline fee credit).
+- statementCredits: EVERY recurring credit with a SPECIFIC description naming the benefit (e.g. "$200 airline fee credit", "Uber Cash", "Digital Entertainment credit", "Saks Fifth Avenue credit", "Hotel credit on prepaid Fine Hotels + Resorts") — NEVER use only "Statement credit". Include amountText ($, points value), cadence (monthly, annual, semi-annual), merchantHint (Uber, Saks, Hilton, airline, Lululemon, Equinox, etc.), categoryHint when relevant.
 - protections: purchase/travel/phone/extended warranty/return/fraud/rental car coverage with coverageSummary and limitsText when stated.
 - perks: lounge access, status, Global Entry/TSA PreCheck, concierge, etc.
 - welcomeOffer: signup bonus if stated.
@@ -45,5 +45,5 @@ export async function extractRewardsFromDocumentText(args: {
   });
 
   const parsed: unknown = JSON.parse(raw);
-  return rewardsExtractSchema.parse(parsed);
+  return parseRewardsExtract(parsed);
 }

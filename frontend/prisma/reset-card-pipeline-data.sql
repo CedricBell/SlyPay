@@ -12,6 +12,7 @@ BEGIN;
 
 -- ── 1. Données dérivées du pipeline intel ───────────────────────────────────
 DELETE FROM "CardCatalogBenefit";
+DELETE FROM "CatalogCardImageBlob";
 DELETE FROM "CatalogDocumentBlob";
 DELETE FROM "RewardRule";
 DELETE FROM "CardIntelJob";

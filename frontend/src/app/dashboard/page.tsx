@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, CreditCard, Plus } from "lucide-react";
 import { NearbyCheckout } from "@/components/nearby-checkout";
-import { apiFetch, ApiError } from "@/lib/api";
+import { ApiError } from "@/lib/api";
+import { useAppData } from "@/lib/app-data";
 import { FadeIn } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
 import { StatusMessage } from "@/components/status-message";
@@ -17,36 +18,26 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BorderBeam } from "@/components/ui/border-beam";
 import { SurfaceCard } from "@/components/ui/surface-card";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [email, setEmail] = useState<string | null>(null);
-  const [cards, setCards] = useState<number | null>(null);
-  const [err, setErr] = useState<string | null>(null);
+  const { me, meReady, cards, cardsReady } = useAppData();
 
   useEffect(() => {
-    (async () => {
-      try {
-        const me = await apiFetch<{ email: string }>("/auth/me");
-        setEmail(me.email);
-        const wallet = await apiFetch<Array<{ id: string }>>("/cards");
-        setCards(wallet.length);
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 401) {
-          router.replace("/login");
-          return;
-        }
-        setErr("Could not load dashboard");
-      }
-    })();
-  }, [router]);
+    if (!meReady) return;
+    if (!me) router.replace("/login");
+  }, [me, meReady, router]);
 
-  if (err) {
-    return <StatusMessage variant="error">{err}</StatusMessage>;
+  if (meReady && !me) {
+    return null;
   }
 
-  const hasCards = cards !== null && cards > 0;
+  const cardCount = cards?.length ?? null;
+  const hasCards = cardCount !== null && cardCount > 0;
+  const loading = !meReady || !cardsReady;
 
   return (
     <FadeIn className="space-y-10">
@@ -54,27 +45,34 @@ export default function DashboardPage() {
         eyebrow="Overview"
         title="Home"
         description={
-          email ? (
+          me ? (
             <>
               Signed in as{" "}
-              <span className="font-medium text-foreground">{email}</span>
+              <span className="font-medium text-foreground">{me.email}</span>
             </>
-          ) : (
-            "Loading…"
-          )
+          ) : loading ? (
+            <span
+              className="inline-block h-4 w-48 animate-pulse rounded-md bg-muted align-middle"
+              aria-hidden
+            />
+          ) : null
         }
       />
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <SurfaceCard className="p-5 transition hover:ring-violet-500/25">
+        <SurfaceCard disableMotion className="p-5">
           <CardHeader className="p-0">
             <CardDescription>Cards configured</CardDescription>
             <CardTitle className="text-3xl tabular-nums">
-              {cards ?? "—"}
+              {loading ? (
+                <Skeleton className="inline-block h-9 w-12" />
+              ) : (
+                cardCount
+              )}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0 pt-4">
-            {cards === 0 ? (
+            {!loading && cardCount === 0 ? (
               <Button variant="gradient" size="sm" className="gap-1.5" asChild>
                 <Link href="/cards/new">
                   <Plus className="size-4" />
@@ -106,9 +104,15 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {cards === 0 ? (
-        <SurfaceCard className="flex flex-col items-start gap-4 border-amber-500/25 bg-gradient-to-br from-amber-500/10 to-card p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-3">
+      {!loading && cardCount === 0 ? (
+        <div className="relative flex flex-col items-start gap-4 overflow-hidden rounded-3xl border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-card/90 to-violet-500/5 p-5 shadow-md backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between">
+          <BorderBeam
+            duration={12}
+            colorFrom="#f59e0b"
+            colorTo="#7c3aed"
+            borderWidth={1.5}
+          />
+          <div className="relative flex items-start gap-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300">
               <CreditCard className="size-5" strokeWidth={2} />
             </span>
@@ -122,13 +126,17 @@ export default function DashboardPage() {
               </p>
             </div>
           </div>
-          <Button variant="gradient" className="shrink-0 gap-1.5" asChild>
+          <Button
+            variant="gradient"
+            className="relative z-10 shrink-0 gap-1.5"
+            asChild
+          >
             <Link href="/cards/new">
               <Plus className="size-4" />
               Add a card
             </Link>
           </Button>
-        </SurfaceCard>
+        </div>
       ) : null}
 
       {hasCards ? <NearbyCheckout /> : null}
