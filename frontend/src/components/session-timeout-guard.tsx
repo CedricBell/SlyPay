@@ -6,7 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { sessionExpiryMessage } from "@/lib/session-timeout";
 
-const AUTH_PAGES = new Set([
+/** Pages accessibles sans session — no session polling / forced logout. */
+const PUBLIC_PAGES = new Set([
+  "/",
   "/login",
   "/register",
   "/forgot-password",
@@ -51,11 +53,9 @@ export function SessionTimeoutGuard() {
       });
       if (res.status === 401) {
         const body = (await res.json().catch(() => ({}))) as { reason?: string };
-        await forceLogout(
-          body.reason === "idle" || body.reason === "max_age"
-            ? body.reason
-            : "max_age",
-        );
+        if (body.reason === "idle" || body.reason === "max_age" || body.reason === "missing") {
+          await forceLogout(body.reason);
+        }
       }
     } catch {
       /* offline — next check will retry */
@@ -63,18 +63,16 @@ export function SessionTimeoutGuard() {
   }, [forceLogout]);
 
   const checkSession = useCallback(async () => {
-    if (AUTH_PAGES.has(pathname)) return;
+    if (PUBLIC_PAGES.has(pathname)) return;
     try {
       const res = await fetch("/api/v1/auth/session-check", {
         credentials: "include",
       });
       if (res.status === 401) {
         const body = (await res.json().catch(() => ({}))) as { reason?: string };
-        await forceLogout(
-          body.reason === "idle" || body.reason === "max_age"
-            ? body.reason
-            : "max_age",
-        );
+        if (body.reason === "idle" || body.reason === "max_age" || body.reason === "missing") {
+          await forceLogout(body.reason);
+        }
       }
     } catch {
       /* ignore transient errors */
@@ -82,7 +80,7 @@ export function SessionTimeoutGuard() {
   }, [forceLogout, pathname]);
 
   useEffect(() => {
-    if (AUTH_PAGES.has(pathname)) return;
+    if (PUBLIC_PAGES.has(pathname)) return;
 
     const onActivity = () => {
       void touchSession();
