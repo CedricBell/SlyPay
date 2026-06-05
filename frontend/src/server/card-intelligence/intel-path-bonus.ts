@@ -8,9 +8,26 @@ export function isIssuerLegalHubListingPath(urlOrPath: string): boolean {
   );
 }
 
+import {
+  isGenericIssuerCardHub,
+  isGenericIssuerDisclosureDocument,
+  isIntelSourceCategoryHub,
+  isIssuerApplyFormUrl,
+  isThirdPartyIntelHost,
+} from "@/server/card-intelligence/intel-source-url-quality";
+
 /** Non-card pages (credit score, lounge guides, legal index, etc.) — not product intel sources. */
 export function isAncillaryIssuerFeaturePath(urlOrPath: string): boolean {
   const p = urlOrPath.toLowerCase();
+  if (isIntelSourceCategoryHub(urlOrPath)) return true;
+  if (isGenericIssuerCardHub(urlOrPath)) return true;
+  if (isIssuerApplyFormUrl(urlOrPath)) return true;
+  if (isGenericIssuerDisclosureDocument(urlOrPath)) return true;
+  try {
+    if (isThirdPartyIntelHost(new URL(urlOrPath).hostname)) return true;
+  } catch {
+    /* */
+  }
   if (isIssuerLegalHubListingPath(p)) return true;
   if (
     /features-benefits|free-credit-score|mycreditguide|unifiedlandingpage|credit-score\/terms|identity-monitoring|global-lounge|membership-rewards\/terms/i.test(
@@ -43,6 +60,15 @@ export function isIssuerCardProductMarketingPath(
         path,
       ) && !/pricing|terms|rules/i.test(path);
   }
+  if (/apple\.com/i.test(hostname)) {
+    return /\/apple-card/i.test(path);
+  }
+  if (/paypal\.com/i.test(hostname)) {
+    return (
+      /\/digital-wallet\/manage-money\//i.test(path) &&
+      /(cashback|mastercard|credit-card)/i.test(path)
+    );
+  }
   return false;
 }
 
@@ -60,6 +86,12 @@ export function pathBonusForIntelDocument(url: URL): number {
 
   if (isIssuerCardProductMarketingPath(url.hostname, url.pathname)) {
     b += 72;
+  }
+  if (/usbank\.com/i.test(url.hostname) && /\/credit-cards\/.*\.html/i.test(p)) {
+    b += 65;
+  }
+  if (/paypal\.com/i.test(url.hostname) && /\/digital-wallet\//i.test(p)) {
+    b += 48;
   }
 
   if (p.includes("/apply/terms")) {

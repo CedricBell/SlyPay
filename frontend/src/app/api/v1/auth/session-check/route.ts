@@ -16,7 +16,13 @@ export async function GET() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      {
+        message: "Not signed in",
+        code: "no_server_session",
+      },
+      { status: 401 },
+    );
   }
 
   const cookieStore = await cookies();

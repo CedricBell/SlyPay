@@ -33,8 +33,14 @@ export type NearbyResponse = {
 
 export type ConfidenceTier = "high" | "medium" | "low";
 
+/** Unique per map pin — several places can fuzzy-match the same merchant row. */
 export function placeKey(m: NearbyMatch): string {
-  return m.merchant?.id ?? `${m.detectedName}:${m.lat.toFixed(5)}:${m.lng.toFixed(5)}`;
+  const geo = `${m.lat.toFixed(5)}:${m.lng.toFixed(5)}`;
+  const name = m.detectedName.trim().toLowerCase();
+  if (m.merchant?.id) {
+    return `${m.merchant.id}@${geo}@${name}`;
+  }
+  return `${name}@${geo}`;
 }
 
 export function confidenceTier(m: NearbyMatch): ConfidenceTier {

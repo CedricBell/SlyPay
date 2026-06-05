@@ -46,6 +46,37 @@ export function formatCaughtApiError(e: unknown): string {
   return "Une erreur inattendue s’est produite.";
 }
 
+export type AuthApiErrorBody = {
+  message: string;
+  reason?: string;
+  code?: string;
+};
+
+/** Parse JSON (or text) from a failed auth `fetch` response. */
+export async function readAuthApiError(
+  res: Response,
+): Promise<AuthApiErrorBody> {
+  const text = await res.text();
+  try {
+    const j = JSON.parse(text) as {
+      message?: unknown;
+      reason?: unknown;
+      code?: unknown;
+    };
+    const message =
+      typeof j?.message === "string" && j.message.trim()
+        ? j.message.trim()
+        : formatApiErrorForUser(text, res.status);
+    return {
+      message,
+      reason: typeof j?.reason === "string" ? j.reason : undefined,
+      code: typeof j?.code === "string" ? j.code : undefined,
+    };
+  } catch {
+    return { message: formatApiErrorForUser(text, res.status) };
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit & { auth?: boolean } = {},

@@ -1,5 +1,6 @@
 import { sha256Hex } from "@/server/canonical-hash";
 import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
+import { detectCoBrandContext } from "@/server/card-intelligence/co-brand-discovery";
 import { isPlaceholderIssuerForOpenSearch } from "@/server/card-intelligence/pdf-discovery-query";
 
 function normalizeKey(s: string): string {
@@ -225,13 +226,36 @@ export function resolveIntelIssuerAndCardName(
   issuer: string,
   cardName: string,
 ): { issuer: string; cardName: string; corrected: boolean } {
-  if (!isPlaceholderIssuerForOpenSearch(issuer)) {
-    return { issuer: issuer.trim(), cardName: cardName.trim(), corrected: false };
+  const trimmedIssuer = issuer.trim();
+  const trimmedName = cardName.trim();
+
+  const coBrand = detectCoBrandContext(trimmedIssuer, trimmedName);
+  if (coBrand && isPlaceholderIssuerForOpenSearch(trimmedIssuer)) {
+    return {
+      issuer: coBrand.bankIssuer,
+      cardName: trimmedName,
+      corrected: true,
+    };
+  }
+  if (
+    coBrand &&
+    !isPlaceholderIssuerForOpenSearch(trimmedIssuer) &&
+    normalizeKey(trimmedIssuer) !== normalizeKey(coBrand.bankIssuer)
+  ) {
+    return {
+      issuer: coBrand.bankIssuer,
+      cardName: trimmedName,
+      corrected: true,
+    };
   }
 
-  const inferred = inferIssuerAndProductName(cardName.trim());
+  if (!isPlaceholderIssuerForOpenSearch(trimmedIssuer)) {
+    return { issuer: trimmedIssuer, cardName: trimmedName, corrected: false };
+  }
+
+  const inferred = inferIssuerAndProductName(trimmedName);
   if (!inferred || isPlaceholderIssuerForOpenSearch(inferred.issuer)) {
-    return { issuer: issuer.trim(), cardName: cardName.trim(), corrected: false };
+    return { issuer: trimmedIssuer, cardName: trimmedName, corrected: false };
   }
 
   return {

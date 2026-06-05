@@ -4,6 +4,7 @@ import {
   fetchPdfBuffer,
 } from "@/server/card-intelligence/fetch-document";
 import type { IntelDocumentKind } from "@/server/card-intelligence/discover-official-pdf-url";
+import { probeIntelDocumentUrl } from "@/server/card-intelligence/intel-document-probe";
 
 const MAX_BYTES = 15 * 1024 * 1024;
 
@@ -37,14 +38,35 @@ export async function loadCatalogDocumentText(args: {
   }
 
   const fetchUrl = args.documentUrl;
-  const text =
-    args.sourceKind === "html"
-      ? (await import("@/server/card-intelligence/html-to-intel-text")).htmlDocumentToPlainText(
-          await fetchHtmlDocument(fetchUrl),
-        )
-      : await (
-          await import("@/server/card-intelligence/pdf-text")
-        ).pdfBufferToText(await fetchPdfBuffer(fetchUrl));
+  const { htmlDocumentToPlainText } = await import(
+    "@/server/card-intelligence/html-to-intel-text"
+  );
+  const { pdfBufferToText } = await import(
+    "@/server/card-intelligence/pdf-text"
+  );
+
+  let kind = args.sourceKind;
+  if (!kind) {
+    const probe = await probeIntelDocumentUrl(fetchUrl);
+    kind = probe.kind;
+  }
+
+  let text = "";
+
+  if (kind === "html") {
+    text = htmlDocumentToPlainText(await fetchHtmlDocument(fetchUrl));
+  } else {
+    try {
+      const buf = await fetchPdfBuffer(fetchUrl);
+      if (isPdfBytes(buf)) {
+        text = await pdfBufferToText(buf);
+      } else {
+        text = htmlDocumentToPlainText(buf.toString("utf8"));
+      }
+    } catch {
+      text = htmlDocumentToPlainText(await fetchHtmlDocument(fetchUrl));
+    }
+  }
 
   if (!text?.trim()) {
     throw new Error("Could not extract text from document");

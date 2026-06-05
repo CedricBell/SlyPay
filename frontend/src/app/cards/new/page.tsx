@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useCallback, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useState } from "react";
 import {
   CardCatalogSuggest,
   type CatalogTemplate,
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 export default function NewCardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { refreshCards } = useAppData();
   const [query, setQuery] = useState("");
   const [resolved, setResolved] = useState<{
@@ -104,7 +105,7 @@ export default function NewCardPage() {
     }
   };
 
-  const applyCatalog = (t: CatalogTemplate) => {
+  const applyCatalog = useCallback((t: CatalogTemplate) => {
     setPickedFromList(true);
     setSelected(t);
     setQuery(`${t.issuer} — ${t.name}`);
@@ -118,7 +119,27 @@ export default function NewCardPage() {
     setName(t.name);
     setIssuer(t.issuer);
     if (t.colorHex) setColorHex(t.colorHex);
-  };
+  }, []);
+
+  useEffect(() => {
+    const slug = searchParams.get("catalog")?.trim();
+    if (!slug) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const hits = await apiFetch<CatalogTemplate[]>(
+          `/cards/catalog/suggestions?q=${encodeURIComponent(slug)}&limit=5`,
+        );
+        const hit = hits.find((h) => h.id === slug) ?? hits[0];
+        if (!cancelled && hit) applyCatalog(hit);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams, applyCatalog]);
 
   const actionButtons = (
     <>

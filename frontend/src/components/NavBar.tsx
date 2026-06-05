@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   CreditCard,
+  LayoutGrid,
   Home,
   LogOut,
   Shield,
@@ -28,6 +29,7 @@ type NavLink = {
 const links: NavLink[] = [
   { href: "/dashboard", label: "Home", short: "Home", icon: Home },
   { href: "/cards", label: "My cards", short: "Cards", icon: CreditCard },
+  { href: "/catalog", label: "Catalog", short: "Catalog", icon: LayoutGrid },
   { href: "/account", label: "Account", short: "Account", icon: User },
 ];
 
@@ -75,12 +77,10 @@ export function NavBar() {
 
   return (
     <>
-      <header className="sticky top-0 z-50 px-4 pt-3 md:pt-4">
+      <header className="sticky top-0 z-50 border-b border-border/60 bg-background/90 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
         <div
           className={cn(
-            "mx-auto flex max-w-5xl items-center justify-between gap-3 rounded-2xl border border-border/60 px-4 py-2.5",
-            "bg-card/80 shadow-[0_4px_24px_-8px_rgba(15,23,42,0.12)] backdrop-blur-2xl backdrop-saturate-150",
-            "dark:border-violet-500/12 dark:bg-[rgba(12,12,20,0.65)] dark:shadow-[0_8px_32px_-12px_rgba(0,0,0,0.5)]",
+            "mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2.5 md:py-3",
           )}
         >
           <Link

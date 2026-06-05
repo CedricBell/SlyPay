@@ -5,8 +5,11 @@ import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
-import { sessionExpiryMessage } from "@/lib/session-timeout";
+import { readAuthApiError } from "@/lib/api";
+import {
+  sessionExpiryMessage,
+  type SessionExpiryReason,
+} from "@/lib/session-timeout";
 import { FadeIn } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
 import { StatusMessage } from "@/components/status-message";
@@ -15,10 +18,37 @@ import { Field, inputClassName } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { SurfaceCard } from "@/components/ui/surface-card";
 
+const LOGIN_QUERY_ERRORS: Record<string, string> = {
+  auth_callback:
+    "Sign-in with the provider could not be completed. Try again or use email and password.",
+};
+
+function loginMessageFromAuthApi(body: {
+  message: string;
+  reason?: string;
+  code?: string;
+}): string {
+  if (
+    body.reason === "idle" ||
+    body.reason === "max_age" ||
+    body.reason === "missing"
+  ) {
+    return sessionExpiryMessage(body.reason);
+  }
+  if (body.code === "inactive") {
+    return body.message;
+  }
+  return body.message;
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const sessionReason = searchParams.get("reason");
+  const queryError = searchParams.get("error");
+  const queryErrorMessage = queryError
+    ? (LOGIN_QUERY_ERRORS[queryError] ?? `Sign-in error (${queryError})`)
+    : null;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -29,23 +59,39 @@ export function LoginForm() {
     setErr(null);
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) {
-        setErr(error.message);
-        return;
-      }
-      await fetch("/api/v1/auth/session-touch", {
+      const loginRes = await fetch("/api/v1/auth/login", {
         method: "POST",
         credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
       });
+
+      if (!loginRes.ok) {
+        const apiErr = await readAuthApiError(loginRes);
+        setErr(loginMessageFromAuthApi(apiErr));
+        return;
+      }
+
       router.refresh();
+
+      const meRes = await fetch("/api/v1/auth/me", { credentials: "include" });
+      if (!meRes.ok) {
+        const apiErr = await readAuthApiError(meRes);
+        setErr(loginMessageFromAuthApi(apiErr));
+        await fetch("/api/v1/auth/logout", {
+          method: "POST",
+          credentials: "include",
+        });
+        return;
+      }
+
       router.push("/dashboard");
-    } catch {
-      setErr("Something went wrong");
+    } catch (cause) {
+      setErr(
+        cause instanceof Error && cause.message
+          ? cause.message
+          : "Something went wrong",
+      );
     } finally {
       setLoading(false);
     }
@@ -70,14 +116,17 @@ export function LoginForm() {
         className="text-center sm:text-left"
       />
       <SurfaceCard className="p-6 shadow-lg">
+        {queryErrorMessage ? (
+          <StatusMessage variant="error" className="mb-4">
+            {queryErrorMessage}
+          </StatusMessage>
+        ) : null}
         {sessionReason === "idle" ||
         sessionReason === "max_age" ||
         sessionReason === "missing" ? (
           <StatusMessage variant="warning" className="mb-4">
             {sessionExpiryMessage(
-              sessionReason === "idle" || sessionReason === "max_age"
-                ? sessionReason
-                : "missing",
+              sessionReason as SessionExpiryReason,
             )}
           </StatusMessage>
         ) : null}

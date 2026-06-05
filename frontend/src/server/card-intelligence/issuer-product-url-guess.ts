@@ -2,14 +2,11 @@ import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 import { guessIssuerApexDomainsFromDisplayName } from "@/server/card-intelligence/issuer-domain-guess";
 import { normalizeIssuer } from "@/server/card-intelligence/issuer-official-domains";
 
-/** Curated Amex marketing paths (slug tail ≠ URL path). */
-const AMEX_CARD_PATHS: Record<string, string> = {
-  gold: "gold-card",
-  /** Marketing URL is /card/platinum/ (not platinum-card). */
-  platinum: "platinum",
-  green: "green-card",
-  "blue-cash-preferred": "blue-cash-preferred",
-  "blue-cash-everyday": "blue-cash-everyday",
+/** Optional slug tail overrides when marketing path ≠ catalog slug tail. */
+const AMEX_PATH_ALIASES: Record<string, string[]> = {
+  green: ["green", "green-card"],
+  gold: ["gold-card", "gold"],
+  platinum: ["platinum"],
 };
 
 function slugTailAfterIssuerPrefix(productSlug: string, issuer: string): string | null {
@@ -43,8 +40,72 @@ function slugifySegment(s: string): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
-    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/[^a-z0-9+]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function amexPathSegments(productSlug: string, tail: string): string[] {
+  const segments = new Set<string>();
+  const entry = CARD_CATALOG_ENTRIES.find((e) => e.id === productSlug);
+  if (entry?.officialDocumentUrl) {
+    try {
+      const m = new URL(entry.officialDocumentUrl).pathname.match(
+        /\/card\/([^/]+)/i,
+      );
+      if (m?.[1]) segments.add(m[1]);
+    } catch {
+      /* */
+    }
+  }
+
+  const tailKey = tail.replace(/\//g, "-");
+  segments.add(tailKey);
+  if (tailKey.endsWith("-card")) {
+    segments.add(tailKey.replace(/-card$/, ""));
+  } else {
+    segments.add(`${tailKey}-card`);
+  }
+
+  for (const [key, aliases] of Object.entries(AMEX_PATH_ALIASES)) {
+    if (tailKey === key || tailKey.includes(key)) {
+      for (const a of aliases) segments.add(a);
+    }
+  }
+
+  const lowerName = (entry?.name ?? "").toLowerCase();
+  for (const [key, aliases] of Object.entries(AMEX_PATH_ALIASES)) {
+    if (new RegExp(`\\b${key.replace(/-/g, "[\\s-]+")}\\b`).test(lowerName)) {
+      for (const a of aliases) segments.add(a);
+    }
+  }
+
+  return [...segments].filter(Boolean);
+}
+
+function amexUrlsForSegment(seg: string): string[] {
+  return [
+    `https://www.americanexpress.com/us/credit-cards/card/${seg}/`,
+    `https://www.americanexpress.com/en-us/credit-cards/card/${seg}/`,
+  ];
+}
+
+/** Reachability-checked candidates for Amex marketing pages. */
+export function amexMarketingUrlCandidates(
+  productSlug: string,
+  cardName?: string,
+): string[] {
+  const issuer = "American Express";
+  const tail = slugTailAfterIssuerPrefix(productSlug, issuer);
+  const urls: string[] = [];
+  if (tail) {
+    for (const seg of amexPathSegments(productSlug, tail)) {
+      urls.push(...amexUrlsForSegment(seg));
+    }
+  }
+  if (cardName?.trim()) {
+    urls.push(...guessAmexProductPageUrlsFromCardName(cardName));
+  }
+  return [...new Set(urls)];
 }
 
 /** Common marketing paths for fintech / unmapped issuers. */
@@ -67,6 +128,7 @@ function guessGenericProductPageUrls(
     "/cards",
     "/us/en/credit-card",
     "/us/en/credit-cards",
+    "/apple-card",
   ];
   for (const slug of slugs) {
     pathTemplates.push(
@@ -96,13 +158,12 @@ export function guessAmexProductPageUrlsFromCardName(cardName: string): string[]
     .normalize("NFD")
     .replace(/\p{M}/gu, "");
   const urls: string[] = [];
-  for (const [key, pathSeg] of Object.entries(AMEX_CARD_PATHS)) {
+  for (const [key, aliases] of Object.entries(AMEX_PATH_ALIASES)) {
     const token = key.replace(/-/g, "[\\s-]+");
     if (new RegExp(`\\b${token}\\b`).test(lower)) {
-      urls.push(
-        `https://www.americanexpress.com/us/credit-cards/card/${pathSeg}/`,
-        `https://www.americanexpress.com/en-us/credit-cards/card/${pathSeg}/`,
-      );
+      for (const seg of aliases) {
+        urls.push(...amexUrlsForSegment(seg));
+      }
     }
   }
   if (/\bplatinum\b/.test(lower) && !urls.length) {
@@ -111,21 +172,6 @@ export function guessAmexProductPageUrlsFromCardName(cardName: string): string[]
     );
   }
   return [...new Set(urls)];
-}
-
-function amexCardPath(productSlug: string, tail: string): string {
-  const entry = CARD_CATALOG_ENTRIES.find((e) => e.id === productSlug);
-  if (entry?.officialDocumentUrl) {
-    try {
-      const u = new URL(entry.officialDocumentUrl);
-      const m = u.pathname.match(/\/card\/([^/]+)/i);
-      if (m?.[1]) return m[1];
-    } catch {
-      /* */
-    }
-  }
-  const tailKey = tail.replace(/\//g, "-");
-  return AMEX_CARD_PATHS[tailKey] ?? tailKey;
 }
 
 /**
@@ -155,40 +201,60 @@ export function guessIssuerProductPageUrls(
     return [...new Set(urls)];
   }
 
+  const tailDash = tail.replace(/\//g, "-");
+
   if (key === "chase" || key.includes("chase")) {
     urls.push(
       `https://creditcards.chase.com/rewards-credit-cards/${tail}`,
       `https://creditcards.chase.com/cash-back-credit-cards/${tail}`,
       `https://creditcards.chase.com/aeroplan-credit-cards/${tail}`,
     );
-    if (tail.includes("sapphire")) {
-      urls.push(
-        `https://creditcards.chase.com/rewards-credit-cards/sapphire/preferred`,
-        `https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve`,
-      );
-    }
   }
 
   if (key.includes("american express") || key === "amex") {
-    const cardPath = amexCardPath(productSlug, tail);
-    urls.push(
-      `https://www.americanexpress.com/us/credit-cards/card/${cardPath}/`,
-      `https://www.americanexpress.com/en-us/credit-cards/card/${cardPath}/`,
-      `https://www.americanexpress.com/us/credit-cards/card/${cardPath}/apply/terms/`,
-    );
+    for (const seg of amexPathSegments(productSlug, tail)) {
+      urls.push(...amexUrlsForSegment(seg));
+    }
     if (cardName?.trim()) {
       urls.push(...guessAmexProductPageUrlsFromCardName(cardName));
     }
   }
 
   if (key.includes("discover")) {
-    urls.push(`https://www.discover.com/credit-cards/${tail.replace(/\//g, "-")}/`);
+    urls.push(`https://www.discover.com/credit-cards/${tailDash}/`);
   }
 
   if (key.includes("capital one")) {
-    urls.push(
-      `https://www.capitalone.com/credit-cards/${tail.replace(/\//g, "-")}/`,
-    );
+    const paths = [
+      tailDash,
+      `${tailDash}-credit-card`,
+      tailDash.replace(/one$/, "one-credit-card"),
+    ];
+    for (const p of [...new Set(paths)]) {
+      urls.push(
+        `https://www.capitalone.com/credit-cards/${p}/`,
+        `https://creditcards.capitalone.com/credit-cards/${p}/`,
+      );
+    }
+  }
+
+  if (key.includes("us bank") || key.includes("u s bank")) {
+    const usbPaths = [
+      tailDash,
+      tailDash.replace(/cash-plus/, "cash-plus-visa-signature"),
+      `cash-plus-visa-signature-credit-card`,
+    ];
+    for (const p of [...new Set(usbPaths)]) {
+      urls.push(
+        `https://www.usbank.com/credit-cards/${p}.html`,
+        `https://www.usbank.com/credit-cards/${p}/`,
+        `https://www.usbank.com/credit-cards/${p}-credit-card.html`,
+      );
+    }
+  }
+
+  if (cardName?.trim()) {
+    urls.push(...guessGenericProductPageUrls(issuer, cardName));
   }
 
   return [...new Set(urls)];

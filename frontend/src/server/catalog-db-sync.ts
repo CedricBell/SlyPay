@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { stableAdHocCatalogSlug } from "@/server/catalog-infer";
 import { resolveCatalogImageUrl } from "@/server/catalog-card-art";
-import { resolveAndPersistCatalogImage } from "@/server/catalog-card-image";
+import { runCatalogImageJob } from "@/server/catalog-image-pipeline";
 import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 
 /** Upserts one row in `CardCatalogProduct` from the in-repo catalog (slug = entry id). */
@@ -44,12 +44,10 @@ export async function upsertCatalogProductFromSlug(slug: string) {
     },
   });
 
-  await resolveAndPersistCatalogImage({
+  await runCatalogImageJob({
     productSlug: entry.id,
     issuer: entry.issuer,
     cardName: entry.name,
-    currentImageUrl: row.imageUrl,
-    officialDocumentUrl: row.officialDocumentUrl,
   }).catch(() => undefined);
 
   return prisma.cardCatalogProduct.findUniqueOrThrow({ where: { slug: entry.id } });

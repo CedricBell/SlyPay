@@ -15,6 +15,7 @@ const adminLinks = [
   { href: "/admin/users", label: "Utilisateurs" },
   { href: "/admin/credit-cards", label: "Catalogue cartes" },
   { href: "/admin/card-catalog", label: "Intel catalogue" },
+  { href: "/admin/contributions", label: "Signalements" },
 ];
 
 export default function AdminLayout({

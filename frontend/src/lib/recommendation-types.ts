@@ -10,6 +10,7 @@ export type RecRes = {
     issuer: string;
     last4: string | null;
     colorHex?: string | null;
+    catalogImageUrl?: string | null;
   } | null;
   reasoning: string[];
   bestCardBenefits?: CardSpendBenefits | null;
@@ -20,8 +21,9 @@ export type RecRes = {
     effectiveMultiplier: number;
     earningType: string;
     rateLabel: string;
-    last4?: string | null;
-    colorHex?: string | null;
+  last4?: string | null;
+  colorHex?: string | null;
+  catalogImageUrl?: string | null;
     benefits: CardSpendBenefits;
     explanationLines: string[];
     catalogRotatingQuarters?: Array<{

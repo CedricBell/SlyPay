@@ -47,7 +47,9 @@ export async function updateSession(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
   const isAuthApi =
-    path.startsWith("/api/v1/auth/session-") || path === "/api/v1/auth/logout";
+    path.startsWith("/api/v1/auth/session-") ||
+    path === "/api/v1/auth/logout" ||
+    path === "/api/v1/auth/login";
 
   if (user && !PUBLIC_PATHS.has(path) && !path.startsWith("/auth/")) {
     const started = request.cookies.get(SESSION_COOKIE_STARTED)?.value;
@@ -59,25 +61,28 @@ export async function updateSession(request: NextRequest) {
       const { expired, reason } = evaluateSessionExpiry(started, lastActive);
 
       if (expired) {
-        await supabase.auth.signOut();
-        clearSessionTrackingCookies(supabaseResponse);
+        // Fresh Supabase session + stale app timeout cookies (common right after login).
+        if (path === "/api/v1/auth/session-touch") {
+          stampFreshSessionCookies(supabaseResponse);
+        } else {
+          await supabase.auth.signOut();
+          clearSessionTrackingCookies(supabaseResponse);
 
-        if (path.startsWith("/api/")) {
-          return NextResponse.json(
-            { message: "Session expired", reason: reason ?? "max_age" },
-            { status: 401 },
-          );
+          if (path.startsWith("/api/")) {
+            return NextResponse.json(
+              { message: "Session expired", reason: reason ?? "max_age" },
+              { status: 401 },
+            );
+          }
+
+          const url = request.nextUrl.clone();
+          url.pathname = "/login";
+          url.searchParams.set("reason", reason ?? "max_age");
+          const redirect = NextResponse.redirect(url);
+          clearSessionTrackingCookies(redirect);
+          return redirect;
         }
-
-        const url = request.nextUrl.clone();
-        url.pathname = "/login";
-        url.searchParams.set("reason", reason ?? "max_age");
-        const redirect = NextResponse.redirect(url);
-        clearSessionTrackingCookies(redirect);
-        return redirect;
-      }
-
-      if (!isAuthApi) {
+      } else if (!isAuthApi) {
         touchSessionActivityCookie(supabaseResponse);
       }
     }

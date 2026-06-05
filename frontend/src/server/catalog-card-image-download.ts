@@ -4,7 +4,13 @@ export const MAX_CATALOG_IMAGE_BYTES = 2 * 1024 * 1024;
 
 /** Issuer CDNs + trusted card-art hosts from image search. */
 export const TRUSTED_CARD_ART_HOST =
-  /(americanexpress\.com|creditcards\.chase\.com|\.chase\.com|citibank\.com|\.citi\.com|wellsfargo\.com|bankofamerica\.com|discover\.com|usbank\.com|capitalone\.com|ecm\.capitalone\.com|apple\.com|biltrewards\.com|prodstatic\.com)/i;
+  /(americanexpress\.com|creditcards\.chase\.com|creditcards\.com|\.chase\.com|citibank\.com|\.citi\.com|wellsfargo\.com|bankofamerica\.com|discover\.com|usbank\.com|capitalone\.com|ecm\.capitalone\.com|apple\.com|biltrewards\.com|static\.biltrewards\.com|prodstatic\.com|macys\.com|amazon\.com|target\.com|costco\.com|walmart\.com|lowes\.com|nordstrom\.com|kohls\.com|homedepot\.com|bestbuy\.com|bloomingdales\.com|rei\.com|wayfair\.com|synchrony\.com|mysynchrony\.com|paypal\.com|gap\.com|oldnavy\.com|barclays\.com|barclaycardus\.com)/i;
+
+export function isTrustedCardArtHostname(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (TRUSTED_CARD_ART_HOST.test(h)) return true;
+  return false;
+}
 
 export function isImageBytes(buf: Buffer): boolean {
   if (buf.length < 12) return false;
@@ -62,7 +68,7 @@ export async function downloadCatalogCardImage(
 
   if (
     target.protocol !== "https:" ||
-    !TRUSTED_CARD_ART_HOST.test(target.hostname) ||
+    !isTrustedCardArtHostname(target.hostname) ||
     isPlaceholderImageUrl(sourceUrl)
   ) {
     return null;

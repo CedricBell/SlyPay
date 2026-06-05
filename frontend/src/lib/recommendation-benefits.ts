@@ -137,13 +137,152 @@ function protectionRelevant(
   if (textMatchesCategory(blob, category) || textMatchesMerchant(blob, merchantName)) {
     return true;
   }
-  const keywords = PROTECTION_CONTEXT_KEYWORDS[p.kind] ?? [];
-  const merchantBlob = normalizeText(merchantName ?? "");
-  if (keywords.some((k) => merchantBlob.includes(k) || blob.includes(k))) return true;
-  if (p.kind === "PURCHASE" || p.kind === "EXTENDED_WARRANTY" || p.kind === "RETURN") {
+  if (category === SpendCategory.TRAVEL && p.kind === "TRAVEL") {
+    return textMatchesCategory(blob, SpendCategory.TRAVEL);
+  }
+  if (p.kind === "RENTAL_CAR") {
+    return (
+      category === SpendCategory.TRAVEL ||
+      textMatchesMerchant(blob, merchantName) ||
+      /\b(rental|car rental)\b/i.test(blob)
+    );
+  }
+  if (p.kind === "PHONE") {
+    const phoneCtx = PROTECTION_CONTEXT_KEYWORDS.PHONE ?? [];
+    const merchantBlob = normalizeText(merchantName ?? "");
+    return phoneCtx.some((k) => merchantBlob.includes(k) || blob.includes(k));
+  }
+  return false;
+}
+
+function normalizeBenefitKey(text: string): string {
+  return normalizeText(text).replace(/\s+/g, " ");
+}
+
+function lineDuplicatesRateLabel(line: string, rateLabel: string): boolean {
+  const a = normalizeBenefitKey(line);
+  const b = normalizeBenefitKey(rateLabel);
+  if (!a || !b) return false;
+  if (a === b || a.includes(b) || b.includes(a)) return true;
+  const multA = a.match(/(\d+(?:\.\d+)?)\s*%/);
+  const multB = b.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (multA && multB && multA[1] === multB[1] && a.includes("cash back") && b.includes("cash back")) {
     return true;
   }
-  return category === SpendCategory.TRAVEL && p.kind === "TRAVEL";
+  return false;
+}
+
+function isDuplicateBenefitLine(line: string, seen: Set<string>, rateLabel: string): boolean {
+  const key = normalizeBenefitKey(line);
+  if (!key || seen.has(key)) return true;
+  if (lineDuplicatesRateLabel(line, rateLabel)) return true;
+  return false;
+}
+
+export type ContextualBenefitBullet = {
+  group: "exclusion" | "earn" | "credit" | "protection" | "perk" | "loyalty" | "caveat";
+  text: string;
+};
+
+type RotatingQuarterBullet = {
+  label: string;
+  multiplier: number;
+  details?: string;
+};
+
+/** One deduped list of bullets relevant to this spend context (rate shown separately). */
+export function buildContextualBenefitBullets(
+  benefits: CardSpendBenefits,
+  opts?: { rotatingQuarters?: RotatingQuarterBullet[] },
+): ContextualBenefitBullet[] {
+  const seen = new Set<string>();
+  const out: ContextualBenefitBullet[] = [];
+
+  const push = (group: ContextualBenefitBullet["group"], text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed || isDuplicateBenefitLine(trimmed, seen, benefits.rateLabel)) return;
+    seen.add(normalizeBenefitKey(trimmed));
+    out.push({ group, text: trimmed });
+  };
+
+  for (const n of benefits.merchantExclusionNotes) {
+    push("exclusion", n);
+  }
+  for (const line of benefits.categoryEarnLines) {
+    push("earn", line);
+  }
+  for (const c of benefits.statementCredits) {
+    push("credit", formatStatementCreditLine(c));
+  }
+  for (const p of benefits.protections) {
+    push("protection", formatProtectionLine(p));
+  }
+  for (const p of benefits.perks) {
+    push("perk", `${p.title} — ${p.description}`);
+  }
+  for (const p of benefits.loyaltyPerks) {
+    push("loyalty", p);
+  }
+  for (const c of benefits.relevantCaveats) {
+    push("caveat", c);
+  }
+  for (const q of opts?.rotatingQuarters ?? []) {
+    let text = `Rotating bonus (${q.label}): ${q.multiplier}%`;
+    if (q.details?.trim()) text += ` — ${q.details.trim()}`;
+    push("earn", text);
+  }
+
+  return out;
+}
+
+export function filterRotatingQuartersForCategory(
+  quarters: unknown,
+  category: SpendCategory,
+  now: Date = new Date(),
+): Array<{
+  validFrom: string;
+  validUntil: string;
+  categories: string[];
+  multiplier: number;
+  label: string;
+  details?: string;
+}> {
+  if (!Array.isArray(quarters)) return [];
+  const out: Array<{
+    validFrom: string;
+    validUntil: string;
+    categories: string[];
+    multiplier: number;
+    label: string;
+    details?: string;
+  }> = [];
+
+  for (const row of quarters) {
+    if (!row || typeof row !== "object") continue;
+    const o = row as Record<string, unknown>;
+    const validFrom = typeof o.validFrom === "string" ? o.validFrom : null;
+    const validUntil = typeof o.validUntil === "string" ? o.validUntil : null;
+    const label = typeof o.label === "string" ? o.label : null;
+    const mult = typeof o.multiplier === "number" ? o.multiplier : null;
+    const cats = Array.isArray(o.categories)
+      ? o.categories.filter((c): c is string => typeof c === "string")
+      : [];
+    if (!validFrom || !validUntil || !label || mult == null || !cats.length) continue;
+    if (!cats.includes(category)) continue;
+    const from = new Date(validFrom);
+    const until = new Date(validUntil);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(until.getTime())) continue;
+    if (now < from || now > until) continue;
+    out.push({
+      validFrom,
+      validUntil,
+      categories: cats,
+      multiplier: mult,
+      label,
+      details: typeof o.details === "string" ? o.details : undefined,
+    });
+  }
+  return out;
 }
 
 export function buildCardSpendBenefits(args: {
@@ -199,8 +338,15 @@ export function buildCardSpendBenefits(args: {
           line += ` (excludes ${exclusions.slice(0, 4).join(", ")}${exclusions.length > 4 ? "…" : ""})`;
         }
         if (notes.trim()) line += ` — ${notes.trim()}`;
-        if (line && !categoryEarnLines.includes(line)) {
-          categoryEarnLines.push(line);
+        if (line) {
+          const key = normalizeBenefitKey(line);
+          if (
+            key &&
+            !categoryEarnLines.some((x) => normalizeBenefitKey(x) === key) &&
+            !lineDuplicatesRateLabel(line, rateLabel)
+          ) {
+            categoryEarnLines.push(line);
+          }
         }
       }
     }
@@ -219,29 +365,25 @@ export function buildCardSpendBenefits(args: {
         (args.category === SpendCategory.TRAVEL &&
           /\b(hotel|resort|lodging|airline|travel|property|hilton|marriott)\b/i.test(blob))
       ) {
-        statementCredits.push({
-          description: sc.description.trim(),
-          amountText: sc.amountText?.trim() ?? null,
-          cadence: sc.cadence?.trim() ?? null,
-          merchantHint: sc.merchantHint?.trim() ?? null,
-          enrollmentRequired: sc.enrollmentRequired ?? false,
-        });
-      }
-    }
-
-    if (
-      statementCredits.length === 0 &&
-      extract.statementCredits.length > 0 &&
-      (args.category === SpendCategory.TRAVEL || args.merchantName)
-    ) {
-      for (const sc of extract.statementCredits.slice(0, 6)) {
-        statementCredits.push({
-          description: sc.description.trim(),
-          amountText: sc.amountText?.trim() ?? null,
-          cadence: sc.cadence?.trim() ?? null,
-          merchantHint: sc.merchantHint?.trim() ?? null,
-          enrollmentRequired: sc.enrollmentRequired ?? false,
-        });
+        const creditKey = normalizeBenefitKey(
+          `${sc.description} ${sc.amountText ?? ""} ${sc.merchantHint ?? ""}`,
+        );
+        if (
+          creditKey &&
+          !statementCredits.some(
+            (c) =>
+              normalizeBenefitKey(`${c.description} ${c.amountText ?? ""}`) ===
+              creditKey,
+          )
+        ) {
+          statementCredits.push({
+            description: sc.description.trim(),
+            amountText: sc.amountText?.trim() ?? null,
+            cadence: sc.cadence?.trim() ?? null,
+            merchantHint: sc.merchantHint?.trim() ?? null,
+            enrollmentRequired: sc.enrollmentRequired ?? false,
+          });
+        }
       }
     }
 
@@ -261,8 +403,7 @@ export function buildCardSpendBenefits(args: {
       const blob = `${perk.title} ${perk.description} ${perk.categoryHint ?? ""}`;
       if (
         textMatchesCategory(blob, args.category) ||
-        textMatchesMerchant(blob, args.merchantName) ||
-        protections.length === 0
+        textMatchesMerchant(blob, args.merchantName)
       ) {
         perks.push({
           title: perk.title.trim(),
@@ -271,7 +412,11 @@ export function buildCardSpendBenefits(args: {
       }
     }
 
-    if (extract.loyaltyProgramNotes?.trim()) {
+    if (
+      extract.loyaltyProgramNotes?.trim() &&
+      (textMatchesCategory(extract.loyaltyProgramNotes, args.category) ||
+        textMatchesMerchant(extract.loyaltyProgramNotes, args.merchantName))
+    ) {
       loyaltyPerks.push(extract.loyaltyProgramNotes.trim());
     }
 
@@ -288,11 +433,13 @@ export function buildCardSpendBenefits(args: {
     }
   }
 
-  if (categoryEarnLines.length === 0) {
-    categoryEarnLines.push(
-      `${formatRateLabel(args.effectiveMultiplier, args.earningType)} (${catLabel})`,
-    );
-  }
+  const seenEarn = new Set<string>();
+  const pushEarnLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed || isDuplicateBenefitLine(trimmed, seenEarn, rateLabel)) return;
+    seenEarn.add(normalizeBenefitKey(trimmed));
+    categoryEarnLines.push(trimmed);
+  };
 
   for (const line of args.engineLines) {
     if (
@@ -300,32 +447,15 @@ export function buildCardSpendBenefits(args: {
       line.includes("cap") ||
       line.includes("Active") ||
       line.includes("Excludes:") ||
-      line.includes("excluded")
+      line.includes("excluded") ||
+      line.includes("Monthly cap:")
     ) {
-      if (!categoryEarnLines.includes(line)) categoryEarnLines.push(line);
+      pushEarnLine(line);
     }
   }
 
-  const welcomeOffer = extract?.welcomeOffer?.description?.trim()
-    ? [
-        extract.welcomeOffer.description.trim(),
-        extract.welcomeOffer.amountText,
-        extract.welcomeOffer.spendRequirement,
-        extract.welcomeOffer.timeframe,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : null;
-
-  const benefitsSummary =
-    extract?.benefitsSummary?.trim() ??
-    (protections.length
-      ? `${protections.length} purchase/travel protection${protections.length > 1 ? "s" : ""} on this card.`
-      : null);
-
-  const summarySnippet = extract?.summary
-    ? extract.summary.trim().slice(0, 320)
-    : null;
+  const benefitsSummary = null;
+  const summarySnippet = null;
 
   return {
     rateLabel,
@@ -333,7 +463,7 @@ export function buildCardSpendBenefits(args: {
     statementCredits,
     protections,
     perks,
-    welcomeOffer,
+    welcomeOffer: null,
     loyaltyPerks,
     relevantCaveats,
     merchantExclusionNotes,

@@ -2,6 +2,7 @@ import {
   CURATED_CATALOG_IMAGE_URLS,
 } from "@/server/card-catalog.entries";
 import { guessAmexProductPageUrlsFromCardName } from "@/server/card-intelligence/issuer-product-url-guess";
+import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 import {
   isPlaceholderImageUrl,
   resolveCatalogImageUrl,
@@ -9,6 +10,7 @@ import {
 } from "@/server/catalog-card-art";
 import { downloadCatalogCardImage } from "@/server/catalog-card-image-download";
 import { discoverCatalogCardImageViaImageSearch } from "@/server/catalog-card-image-search";
+import { catalogImageUrlAllowedForPersist } from "@/server/catalog-image-match";
 
 /** Chase marketplace PNG from slug tail (e.g. sapphire-preferred). */
 function guessChaseDamArtUrl(productSlug: string): string | undefined {
@@ -49,14 +51,20 @@ export function guessBuiltInCardArtUrls(args: {
   cardName?: string;
 }): string[] {
   const urls: string[] = [];
-  const curated = resolveCatalogImageUrl(args.productSlug);
-  if (curated) urls.push(curated);
-  const byName =
-    args.cardName &&
-    resolveCatalogImageUrlByIssuerAndName(args.issuer, args.cardName);
-  if (byName) urls.push(byName);
   const fromMap = CURATED_CATALOG_IMAGE_URLS[args.productSlug];
   if (fromMap) urls.push(fromMap);
+  const curated = resolveCatalogImageUrl(args.productSlug);
+  if (curated) urls.push(curated);
+  const isKnownCatalogSlug = CARD_CATALOG_ENTRIES.some(
+    (e) => e.id === args.productSlug,
+  );
+  if (!isKnownCatalogSlug && args.cardName) {
+    const byName = resolveCatalogImageUrlByIssuerAndName(
+      args.issuer,
+      args.cardName,
+    );
+    if (byName) urls.push(byName);
+  }
   const chase = guessChaseDamArtUrl(args.productSlug);
   if (chase) urls.push(chase);
   const amex = guessAmexDamArtUrl(args.productSlug, args.cardName);
@@ -85,13 +93,23 @@ export async function resolveWorkingCatalogImageUrl(args: {
       issuer: args.issuer,
       cardName,
       productSlug: args.productSlug,
-    })),
+    })).map((h) => h.url),
   ].filter((u): u is string => Boolean(u?.trim()) && !isPlaceholderImageUrl(u));
 
   const seen = new Set<string>();
   for (const url of candidates) {
     if (seen.has(url)) continue;
     seen.add(url);
+    if (
+      !catalogImageUrlAllowedForPersist({
+        url,
+        productSlug: args.productSlug,
+        issuer: args.issuer,
+        cardName,
+      })
+    ) {
+      continue;
+    }
     if (await validateCatalogImageUrl(url)) return url;
   }
   return null;

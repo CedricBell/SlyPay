@@ -1,13 +1,25 @@
 import net from "node:net";
+import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 import { hostnameMatchesIssuer } from "@/server/card-intelligence/issuer-official-domains";
 import { resolveIssuerOfficialHostsWithDb } from "@/server/card-intelligence/issuer-official-hosts";
 import { resolveIssuerCrawlOrigins } from "@/server/card-intelligence/issuer-crawl-origins";
 import {
   buildIssuerScopedSearchQuery,
+  buildMinimalHumanSearchQuery,
   buildOpenWebSearchQuery,
+  buildSlugFirstSearchQuery,
   scorePdfCandidate,
   siblingSlugExclusionTerms,
 } from "@/server/card-intelligence/pdf-discovery-query";
+import {
+  fetchWebSearchHits,
+  openWebDiscoveryEnabled,
+  preferredWebSearchProvider,
+  type WebSearchHit,
+  type WebSearchProvider,
+} from "@/server/card-intelligence/intel-web-search";
+import { fetchIssuerHtml } from "@/server/card-intelligence/issuer-html-links";
+import { scoreRewardRichnessInPlainText } from "@/server/card-intelligence/intel-document-intent";
 import {
   classifyIntelDocumentIntent,
   intentScoreAdjustment,
@@ -17,26 +29,27 @@ import {
   looksLikeOfficialTermsHtmlPath,
   pathBonusForIntelDocument,
 } from "@/server/card-intelligence/intel-path-bonus";
-import { issuerUsesOnlyGuessedDomains } from "@/server/card-intelligence/issuer-domain-guess";
 import { discoverIntelViaCardProductPage } from "@/server/card-intelligence/issuer-card-page-discovery";
 import { harvestIssuerSiteLinks } from "@/server/card-intelligence/issuer-site-crawl";
 import { hostnameResolvesOnlyToPublicAddresses } from "@/server/card-intelligence/public-pdf-host";
+import {
+  buildCoBrandScopedSearchQuery,
+  coBrandIntelPathBonus,
+  resolveIntelDiscoveryHosts,
+  type CoBrandContext,
+} from "@/server/card-intelligence/co-brand-discovery";
 import { resolveIntelIssuerAndCardName } from "@/server/catalog-infer";
+import {
+  isGenericIssuerCardHub,
+  isIntelSourceCategoryHub,
+  isIssuerApplyFormUrl,
+  isThirdPartyIntelHost,
+  isUrlExcluded,
+  shouldTrustSearchRankedProductUrl,
+} from "@/server/card-intelligence/intel-source-url-quality";
+import { probeIntelDocumentUrl } from "@/server/card-intelligence/intel-document-probe";
 
-function openWebDiscoveryEnabled(): boolean {
-  const v = process.env.INTEL_ALLOW_OPEN_WEB?.trim().toLowerCase();
-  return v === "1" || v === "true" || v === "yes";
-}
-
-type GoogleCseItem = { link?: string; title?: string; snippet?: string };
-type GoogleCseResponse = { items?: GoogleCseItem[] };
-
-type BraveWebResult = { url?: string; title?: string; description?: string };
-type BraveWebResponse = {
-  web?: { results?: BraveWebResult[] };
-};
-
-type SearchHit = { url: string; hint: string };
+type SearchHit = WebSearchHit;
 
 export type IntelDocumentKind = "pdf" | "html";
 
@@ -66,6 +79,13 @@ export async function inferIntelDocumentKindFromUrl(
 async function looksLikePdfUrl(url: URL): Promise<boolean> {
   const path = url.pathname.toLowerCase();
   if (path.endsWith(".pdf")) return true;
+  if (
+    /\/credit-cards?\//i.test(path) ||
+    /\/card\//i.test(path) ||
+    /\/apple-card/i.test(path)
+  ) {
+    return false;
+  }
   try {
     const head = await fetch(url.toString(), {
       method: "HEAD",
@@ -150,6 +170,8 @@ async function pickBestOfficialIntelSource(
     issuer?: string;
     productSlug: string;
     exclusionTerms: string[];
+    coBrand?: CoBrandContext | null;
+    excludeUrls?: string[];
   },
 ): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
   const pdfCache = new Map<string, boolean>();
@@ -170,7 +192,9 @@ async function pickBestOfficialIntelSource(
       continue;
     }
     if (url.protocol !== "https:") continue;
+    if (isUrlExcluded(raw, opts.excludeUrls ?? [])) continue;
     if (!hostnameMatchesIssuer(url.hostname, hosts)) continue;
+    if (isIntelSourceCategoryHub(raw)) continue;
     if (isAncillaryIssuerFeaturePath(url.pathname + url.search)) continue;
     const base = scorePdfCandidate({
       url: raw,
@@ -182,12 +206,13 @@ async function pickBestOfficialIntelSource(
       resultIndex: i,
     });
     const pb = pathBonusForIntelDocument(url);
+    const cb = coBrandIntelPathBonus(raw, opts.coBrand);
     const isPdf = await isPdfCached(raw);
     enriched.push({
       url: raw,
       base,
       pb,
-      total: base + pb,
+      total: base + pb + cb,
       isPdf,
       index: i,
     });
@@ -206,6 +231,8 @@ async function pickBestOpenWebIntelSource(
     issuer?: string;
     productSlug: string;
     exclusionTerms: string[];
+    coBrand?: CoBrandContext | null;
+    excludeUrls?: string[];
   },
 ): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
   const pdfCache = new Map<string, boolean>();
@@ -227,6 +254,8 @@ async function pickBestOpenWebIntelSource(
     }
     if (url.protocol !== "https:") continue;
     if (net.isIP(url.hostname)) continue;
+    if (isUrlExcluded(raw, opts.excludeUrls ?? [])) continue;
+    if (isIntelSourceCategoryHub(raw)) continue;
     const base = scorePdfCandidate({
       url: raw,
       hint,
@@ -237,12 +266,13 @@ async function pickBestOpenWebIntelSource(
       resultIndex: i,
     });
     const pb = pathBonusForIntelDocument(url);
+    const cb = coBrandIntelPathBonus(raw, opts.coBrand);
     const isPdf = await isPdfCached(raw);
     enriched.push({
       url: raw,
       base,
       pb,
-      total: base + pb,
+      total: base + pb + cb,
       isPdf,
       index: i,
     });
@@ -251,64 +281,104 @@ async function pickBestOpenWebIntelSource(
   return resolveBestIntelFromEnriched(enriched, { openWebDnsCheck: true });
 }
 
-async function fetchBraveHits(searchQuery: string): Promise<SearchHit[]> {
-  const token =
-    process.env.BRAVE_SEARCH_API_KEY?.trim() ||
-    process.env.BRAVE_API_KEY?.trim();
-  if (!token) return [];
+const MIN_PAGE_CONTENT_REWARD_SCORE = 18;
+const MIN_HUMAN_FIRST_LINK_REWARD_SCORE = 10;
+const MAX_CONTENT_VERIFY_FETCHES = 6;
+const HUMAN_SEARCH_TOP_N = 4;
 
-  const endpoint = new URL("https://api.search.brave.com/res/v1/web/search");
-  endpoint.searchParams.set("q", searchQuery);
-  endpoint.searchParams.set("count", "20");
+/** Blogs / aggregators — not official product intel. */
+const JUNK_OPEN_WEB_HOST =
+  /(?:^|\.)((?:www\.)?(?:reddit|nerdwallet|thepointsguy|doctorofcredit|wikipedia|facebook|youtube|tiktok|pinterest|quora|instagram|linkedin|medium|substack))\.[a-z.]+$/i;
 
-  const res = await fetch(endpoint.toString(), {
-    method: "GET",
-    headers: { "X-Subscription-Token": token },
-    signal: AbortSignal.timeout(25_000),
-  });
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Brave Search failed: HTTP ${res.status} ${text.slice(0, 200)}`);
-  }
-
-  const data = (await res.json()) as BraveWebResponse;
-  return (data.web?.results ?? [])
-    .map((r) => ({
-      url: r.url,
-      hint: [r.title, r.description].filter(Boolean).join(" "),
-    }))
-    .filter((x): x is SearchHit => Boolean(x.url));
+function isJunkOpenWebHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return JUNK_OPEN_WEB_HOST.test(h);
 }
 
-async function fetchGoogleHits(searchQuery: string): Promise<SearchHit[]> {
-  const key = process.env.GOOGLE_API_KEY?.trim();
-  const cx = process.env.GOOGLE_CSE_ID?.trim();
-  if (!key || !cx) return [];
-
-  const url = new URL("https://www.googleapis.com/customsearch/v1");
-  url.searchParams.set("key", key);
-  url.searchParams.set("cx", cx);
-  url.searchParams.set("q", searchQuery);
-  url.searchParams.set("num", "10");
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    signal: AbortSignal.timeout(25_000),
+function filterSearchHitsForOpenWeb(
+  hits: SearchHit[],
+  excludeUrls: string[] = [],
+): SearchHit[] {
+  return hits.filter((hit) => {
+    if (isUrlExcluded(hit.url, excludeUrls)) return false;
+    try {
+      const u = new URL(hit.url);
+      if (u.protocol !== "https:") return false;
+      if (net.isIP(u.hostname)) return false;
+      if (isJunkOpenWebHost(u.hostname)) return false;
+      if (isThirdPartyIntelHost(u.hostname)) return false;
+      if (isIssuerApplyFormUrl(hit.url)) return false;
+      if (isGenericIssuerCardHub(hit.url)) return false;
+      if (isIntelSourceCategoryHub(hit.url)) return false;
+      if (isAncillaryIssuerFeaturePath(u.pathname + u.search)) return false;
+      return true;
+    } catch {
+      return false;
+    }
   });
+}
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`Google CSE failed: HTTP ${res.status} ${text.slice(0, 200)}`);
+/**
+ * When URL scoring is ambiguous, fetch candidate pages and pick the one whose
+ * plain text actually describes earn rates / rewards (closer to human judgment).
+ */
+async function pickIntelSourceByPageContent(
+  hits: SearchHit[],
+  opts: {
+    cardName: string;
+    issuer?: string;
+    productSlug: string;
+    exclusionTerms: string[];
+    coBrand?: CoBrandContext | null;
+    hosts?: string[];
+  },
+): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
+  const ranked = [...hits].slice(0, MAX_CONTENT_VERIFY_FETCHES);
+  let best: { url: string; score: number; rank: number } | null = null;
+
+  for (let i = 0; i < ranked.length; i++) {
+    const { url: raw, hint } = ranked[i];
+    let parsed: URL;
+    try {
+      parsed = new URL(raw);
+    } catch {
+      continue;
+    }
+    if (parsed.protocol !== "https:") continue;
+    if (net.isIP(parsed.hostname)) continue;
+    if (isIntelSourceCategoryHub(raw)) continue;
+    if (isAncillaryIssuerFeaturePath(parsed.pathname + parsed.search)) continue;
+    if (opts.hosts?.length && !hostnameMatchesIssuer(parsed.hostname, opts.hosts)) {
+      continue;
+    }
+
+    const html = await fetchIssuerHtml(raw);
+    if (!html) continue;
+
+    const richness = scoreRewardRichnessInPlainText(html);
+    if (richness < MIN_PAGE_CONTENT_REWARD_SCORE) continue;
+
+    const urlScore = scorePdfCandidate({
+      url: raw,
+      hint,
+      cardName: opts.cardName,
+      issuer: opts.issuer,
+      productSlug: opts.productSlug,
+      exclusionTerms: opts.exclusionTerms,
+      resultIndex: i,
+    });
+    const pb = pathBonusForIntelDocument(parsed);
+    const cb = coBrandIntelPathBonus(raw, opts.coBrand);
+    const total = richness * 3 + urlScore + pb + cb;
+
+    if (!best || total > best.score) {
+      best = { url: raw, score: total, rank: i };
+    }
   }
 
-  const data = (await res.json()) as GoogleCseResponse;
-  return (data.items ?? [])
-    .map((i) => ({
-      url: i.link,
-      hint: [i.title, i.snippet].filter(Boolean).join(" "),
-    }))
-    .filter((x): x is SearchHit => Boolean(x.url));
+  if (!best) return null;
+  const sourceKind = await inferIntelDocumentKindFromUrl(best.url);
+  return { url: best.url, sourceKind };
 }
 
 function siteHostsForScopedSearch(issuer: string, apexHosts: string[]): string[] {
@@ -324,106 +394,242 @@ function siteHostsForScopedSearch(issuer: string, apexHosts: string[]): string[]
   return [...new Set([...apexHosts, ...extra])];
 }
 
-async function discoverScopedPdfUrlViaBrave(args: {
+function buildScopedIntelSearchQuery(args: {
   issuer: string;
   cardName: string;
-  productSlug: string;
   hosts: string[];
   exclusionTerms: string[];
-}): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
-  const q = buildIssuerScopedSearchQuery({
+  coBrand?: CoBrandContext | null;
+}): string {
+  if (args.coBrand) {
+    return buildCoBrandScopedSearchQuery({
+      hosts: args.hosts,
+      coBrand: args.coBrand,
+      cardName: args.cardName,
+      exclusionTerms: args.exclusionTerms,
+    });
+  }
+  return buildIssuerScopedSearchQuery({
     hosts: args.hosts,
     cardName: args.cardName,
     exclusionTerms: args.exclusionTerms,
     extraSiteHosts: siteHostsForScopedSearch(args.issuer, args.hosts),
   });
-  const hits = await fetchBraveHits(q);
-  return pickBestOfficialIntelSource(args.hosts, hits, {
-    cardName: args.cardName,
-    issuer: args.issuer,
-    productSlug: args.productSlug,
-    exclusionTerms: args.exclusionTerms,
-  });
 }
-
-async function discoverScopedPdfUrlViaGoogleCse(args: {
-  issuer: string;
-  cardName: string;
-  productSlug: string;
-  hosts: string[];
-  exclusionTerms: string[];
-}): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
-  const q = buildIssuerScopedSearchQuery({
-    hosts: args.hosts,
-    cardName: args.cardName,
-    exclusionTerms: args.exclusionTerms,
-    extraSiteHosts: siteHostsForScopedSearch(args.issuer, args.hosts),
-  });
-  const hits = await fetchGoogleHits(q);
-  return pickBestOfficialIntelSource(args.hosts, hits, {
-    cardName: args.cardName,
-    issuer: args.issuer,
-    productSlug: args.productSlug,
-    exclusionTerms: args.exclusionTerms,
-  });
-}
-
-async function discoverOpenWebPdfUrlViaBrave(args: {
-  issuer: string;
-  cardName: string;
-  productSlug: string;
-  exclusionTerms: string[];
-}): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
-  const q = buildOpenWebSearchQuery({
-    issuer: args.issuer,
-    cardName: args.cardName,
-    exclusionTerms: args.exclusionTerms,
-  });
-  if (q.length < 4) return null;
-  const hits = await fetchBraveHits(q);
-  return pickBestOpenWebIntelSource(hits, {
-    cardName: args.cardName,
-    issuer: args.issuer,
-    productSlug: args.productSlug,
-    exclusionTerms: args.exclusionTerms,
-  });
-}
-
-async function discoverOpenWebPdfUrlViaGoogleCse(args: {
-  issuer: string;
-  cardName: string;
-  productSlug: string;
-  exclusionTerms: string[];
-}): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
-  const q = buildOpenWebSearchQuery({
-    issuer: args.issuer,
-    cardName: args.cardName,
-    exclusionTerms: args.exclusionTerms,
-  });
-  if (q.length < 4) return null;
-  const hits = await fetchGoogleHits(q);
-  return pickBestOpenWebIntelSource(hits, {
-    cardName: args.cardName,
-    issuer: args.issuer,
-    productSlug: args.productSlug,
-    exclusionTerms: args.exclusionTerms,
-  });
-}
-
-export type PdfDiscoveryProvider = "brave" | "google_cse" | null;
 
 /**
- * Finds rewards/terms on the **issuer's own site** when domains are mapped:
- * 1) hub → card product page → « Rewards and rules » link (no search engine),
- * 2) hub crawl fallback,
- * 3) optional `site:issuer.com` via Brave/Google only if `INTEL_ALLOW_ISSUER_SITE_SEARCH=1`.
- * Open-web search is **off** unless `INTEL_ALLOW_OPEN_WEB=1`.
+ * Mimics manual Google: short query → trust top results → keep first page
+ * whose body actually describes rewards (not URL heuristics alone).
+ */
+async function pickFirstOfficialBraveHit(
+  hits: SearchHit[],
+  hosts: string[],
+  coBrand?: CoBrandContext | null,
+): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
+  const retailerHosts = coBrand?.retailerHosts ?? [];
+  for (let i = 0; i < Math.min(HUMAN_SEARCH_TOP_N, hits.length); i++) {
+    const raw = hits[i]!.url;
+    let host = "";
+    try {
+      host = new URL(raw).hostname;
+    } catch {
+      continue;
+    }
+    const onIssuer = hostnameMatchesIssuer(host, hosts);
+    const onRetailer = retailerHosts.some(
+      (h) => host === h || host.endsWith(`.${h}`),
+    );
+    if (!onIssuer && !onRetailer) continue;
+    const probed = await probeIntelDocumentUrl(raw);
+    if (probed.reachable || probed.status === 403) {
+      return { url: raw, sourceKind: probed.kind };
+    }
+  }
+  return null;
+}
+
+async function discoverViaHumanStyleSearch(args: {
+  cardName: string;
+  productSlug: string;
+  issuer: string;
+  exclusionTerms: string[];
+  coBrand?: CoBrandContext | null;
+  excludeUrls?: string[];
+  hosts: string[];
+}): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
+  const queries = [
+    buildMinimalHumanSearchQuery({
+      cardName: args.cardName,
+      productSlug: args.productSlug,
+      issuer: args.issuer,
+    }),
+    buildSlugFirstSearchQuery({
+      productSlug: args.productSlug,
+      cardName: args.cardName,
+      issuer: args.issuer,
+      exclusionTerms: args.exclusionTerms,
+    }),
+  ];
+
+  for (const q of queries) {
+    if (q.length < 4) continue;
+    const hits = filterSearchHitsForOpenWeb(
+      await fetchWebSearchHits(q),
+      args.excludeUrls ?? [],
+    );
+    const officialFirst = await pickFirstOfficialBraveHit(
+      hits,
+      args.hosts,
+      args.coBrand,
+    );
+    if (officialFirst) return officialFirst;
+
+    for (let i = 0; i < Math.min(HUMAN_SEARCH_TOP_N, hits.length); i++) {
+      const { url: raw, hint } = hits[i];
+      if (isIntelSourceCategoryHub(raw)) continue;
+
+      const urlScore = scorePdfCandidate({
+        url: raw,
+        hint,
+        cardName: args.cardName,
+        issuer: args.issuer,
+        productSlug: args.productSlug,
+        exclusionTerms: args.exclusionTerms,
+        resultIndex: i,
+      });
+      if (urlScore < -40) continue;
+
+      if (
+        shouldTrustSearchRankedProductUrl(raw, {
+          productSlug: args.productSlug,
+          cardName: args.cardName,
+          searchRank: i,
+          hint,
+        })
+      ) {
+        const probed = await probeIntelDocumentUrl(raw);
+        if (probed.reachable || probed.status === 403) {
+          return { url: raw, sourceKind: probed.kind };
+        }
+      }
+
+      const html = await fetchIssuerHtml(raw);
+      if (!html) continue;
+      const richness =
+        scoreRewardRichnessInPlainText(html) +
+        scoreRewardRichnessInPlainText(hint);
+      if (richness < MIN_HUMAN_FIRST_LINK_REWARD_SCORE) continue;
+
+      const sourceKind = await inferIntelDocumentKindFromUrl(raw);
+      return { url: raw, sourceKind };
+    }
+  }
+  return null;
+}
+
+async function discoverScopedViaWebSearch(args: {
+  issuer: string;
+  cardName: string;
+  productSlug: string;
+  hosts: string[];
+  exclusionTerms: string[];
+  coBrand?: CoBrandContext | null;
+  excludeUrls?: string[];
+}): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
+  const q = buildScopedIntelSearchQuery(args);
+  const hits = fetchWebSearchHits(q).then((h) =>
+    filterSearchHitsForOpenWeb(h, args.excludeUrls ?? []),
+  );
+  const pickOpts = {
+    cardName: args.cardName,
+    issuer: args.issuer,
+    productSlug: args.productSlug,
+    exclusionTerms: args.exclusionTerms,
+    coBrand: args.coBrand,
+    excludeUrls: args.excludeUrls,
+  };
+  const ranked = await pickBestOfficialIntelSource(
+    args.hosts,
+    await hits,
+    pickOpts,
+  );
+  if (ranked) return ranked;
+  return pickIntelSourceByPageContent(await hits, {
+    ...pickOpts,
+    hosts: args.hosts,
+  });
+}
+
+async function discoverOpenWebViaSearch(args: {
+  issuer: string;
+  cardName: string;
+  productSlug: string;
+  exclusionTerms: string[];
+  coBrand?: CoBrandContext | null;
+  hosts?: string[];
+  excludeUrls?: string[];
+}): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
+  const pickOpts = {
+    cardName: args.cardName,
+    issuer: args.issuer,
+    productSlug: args.productSlug,
+    exclusionTerms: args.exclusionTerms,
+    coBrand: args.coBrand,
+    excludeUrls: args.excludeUrls,
+  };
+
+  const queries = [
+    buildMinimalHumanSearchQuery({
+      cardName: args.cardName,
+      productSlug: args.productSlug,
+      issuer: args.issuer,
+    }),
+    buildSlugFirstSearchQuery({
+      productSlug: args.productSlug,
+      cardName: args.cardName,
+      issuer: args.issuer,
+      exclusionTerms: args.exclusionTerms,
+    }),
+    buildOpenWebSearchQuery({
+      issuer: args.issuer,
+      cardName: args.cardName,
+      exclusionTerms: args.exclusionTerms,
+      productSlug: args.productSlug,
+    }),
+  ];
+
+  for (const q of queries) {
+    if (q.length < 4) continue;
+    const hits = filterSearchHitsForOpenWeb(
+      await fetchWebSearchHits(q),
+      args.excludeUrls ?? [],
+    );
+    const ranked = await pickBestOpenWebIntelSource(hits, pickOpts);
+    if (ranked) return ranked;
+    const verified = await pickIntelSourceByPageContent(hits, {
+      ...pickOpts,
+      hosts: args.hosts,
+    });
+    if (verified) return verified;
+  }
+  return null;
+}
+
+export type PdfDiscoveryProvider = WebSearchProvider | null;
+
+/**
+ * 1) **Human-style web search** (Brave — whole web): `"Card Name" credit card` → top links → HTML rewards check.
+ * 2) Guessed product URLs + issuer hub crawl.
+ * 3) Scoped `site:…` search + richer open-web queries.
+ * Google CSE is optional (often cannot enable « entire web »); Brave replaces it.
  */
 export async function discoverOfficialPdfUrl(args: {
   issuer: string;
   cardName: string;
   /** Catalog slug — drives sibling exclusions (e.g. discover-it vs discover-it-miles). */
   productSlug: string;
+  /** URLs that failed extraction or are known category hubs — never pick again. */
+  excludeUrls?: string[];
 }): Promise<{
   url: string | null;
   sourceKind: IntelDocumentKind | null;
@@ -436,26 +642,41 @@ export async function discoverOfficialPdfUrl(args: {
   const issuer = resolved.issuer;
   const cardName = resolved.cardName;
 
-  const hosts = await resolveIssuerOfficialHostsWithDb(issuer);
-  const exclusionTerms = siblingSlugExclusionTerms(issuer, args.productSlug);
-  const guessedOnly =
-    hosts.length > 0 && issuerUsesOnlyGuessedDomains(issuer, hosts);
-  const prefer =
-    process.env.PDF_DISCOVERY_PROVIDER?.trim().toLowerCase() ?? "";
-
-  const scopedPayload = {
+  const discovery = await resolveIntelDiscoveryHosts(
     issuer,
     cardName,
+    args.productSlug,
+  );
+  const hosts = discovery.hosts;
+  const coBrand = discovery.coBrand;
+  const cardNameForDiscovery = discovery.cardNameForDiscovery;
+  const issuerForDiscovery = discovery.issuerForDiscovery;
+
+  const exclusionTerms = siblingSlugExclusionTerms(
+    issuerForDiscovery,
+    args.productSlug,
+  );
+  const excludeUrls = args.excludeUrls ?? [];
+  const searchProvider = preferredWebSearchProvider();
+
+  const scopedPayload = {
+    issuer: issuerForDiscovery,
+    cardName: cardNameForDiscovery,
     productSlug: args.productSlug,
     hosts,
     exclusionTerms,
+    coBrand,
+    excludeUrls,
   };
 
   const openPayload = {
-    issuer,
-    cardName,
+    issuer: issuerForDiscovery,
+    cardName: cardNameForDiscovery,
     productSlug: args.productSlug,
     exclusionTerms,
+    coBrand,
+    hosts,
+    excludeUrls,
   };
 
   type DiscoveryResult = {
@@ -474,18 +695,66 @@ export async function discoverOfficialPdfUrl(args: {
     resolvedCardName: cardName,
   });
 
-  const tryScopedBrave = () => discoverScopedPdfUrlViaBrave(scopedPayload);
-  const tryScopedGoogle = () => discoverScopedPdfUrlViaGoogleCse(scopedPayload);
-  const tryOpenBrave = () => discoverOpenWebPdfUrlViaBrave(openPayload);
-  const tryOpenGoogle = () => discoverOpenWebPdfUrlViaGoogleCse(openPayload);
+  const catalogCuratedUrl = CARD_CATALOG_ENTRIES.find(
+    (e) => e.id === args.productSlug,
+  )?.officialDocumentUrl;
+  if (
+    catalogCuratedUrl &&
+    !isUrlExcluded(catalogCuratedUrl, excludeUrls) &&
+    !isIntelSourceCategoryHub(catalogCuratedUrl) &&
+    !isGenericIssuerCardHub(catalogCuratedUrl)
+  ) {
+    const probed = await probeIntelDocumentUrl(catalogCuratedUrl);
+    if (probed.reachable || probed.status === 403) {
+      return withResolved({
+        url: catalogCuratedUrl,
+        sourceKind: probed.kind,
+        provider: null,
+      });
+    }
+  }
+
+  const tryHumanSearch = () =>
+    openWebDiscoveryEnabled()
+      ? discoverViaHumanStyleSearch({
+          cardName: cardNameForDiscovery,
+          productSlug: args.productSlug,
+          issuer: issuerForDiscovery,
+          exclusionTerms,
+          coBrand,
+          excludeUrls,
+          hosts,
+        })
+      : Promise.resolve(null);
+  const tryScopedSearch = () => discoverScopedViaWebSearch(scopedPayload);
+  const tryOpenSearch = () =>
+    openWebDiscoveryEnabled()
+      ? discoverOpenWebViaSearch(openPayload)
+      : Promise.resolve(null);
+
+  const searchHit = (
+    r: { url: string; sourceKind: IntelDocumentKind } | null,
+  ): DiscoveryResult | null =>
+    r
+      ? withResolved({
+          url: r.url,
+          sourceKind: r.sourceKind,
+          provider: searchProvider,
+        })
+      : null;
+
+  const humanFirst = await tryHumanSearch();
+  const humanHit = searchHit(humanFirst);
+  if (humanHit) return humanHit;
 
   if (hosts.length) {
     const fromCardFlow = await discoverIntelViaCardProductPage({
       hosts,
-      cardName,
-      issuer,
+      cardName: cardNameForDiscovery,
+      issuer: issuerForDiscovery,
       productSlug: args.productSlug,
       exclusionTerms,
+      coBrand,
     });
     if (fromCardFlow) {
       return withResolved({
@@ -497,17 +766,18 @@ export async function discoverOfficialPdfUrl(args: {
 
     const hubHits = await harvestIssuerSiteLinks({
       hosts,
-      cardName,
-      issuer,
+      cardName: cardNameForDiscovery,
+      issuer: issuerForDiscovery,
       productSlug: args.productSlug,
       exclusionTerms,
     });
     if (hubHits.length) {
       const fromHub = await pickBestOfficialIntelSource(hosts, hubHits, {
-        cardName,
-        issuer,
+        cardName: cardNameForDiscovery,
+        issuer: issuerForDiscovery,
         productSlug: args.productSlug,
         exclusionTerms,
+        coBrand,
       });
       if (fromHub) {
         return withResolved({
@@ -518,94 +788,20 @@ export async function discoverOfficialPdfUrl(args: {
       }
     }
 
-    // Last resort: issuer-scoped search (`site:chase.com` includes creditcards.chase.com).
-    if (prefer === "google_cse" || prefer === "google") {
-      const g = await tryScopedGoogle();
-      if (g)
-        return withResolved({
-          url: g.url,
-          sourceKind: g.sourceKind,
-          provider: "google_cse",
-        });
-      const b = await tryScopedBrave();
-      if (b)
-        return withResolved({
-          url: b.url,
-          sourceKind: b.sourceKind,
-          provider: "brave",
-        });
-    } else {
-      const braveFirst = await tryScopedBrave();
-      if (braveFirst)
-        return withResolved({
-          url: braveFirst.url,
-          sourceKind: braveFirst.sourceKind,
-          provider: "brave",
-        });
-      const googleSecond = await tryScopedGoogle();
-      if (googleSecond)
-        return withResolved({
-          url: googleSecond.url,
-          sourceKind: googleSecond.sourceKind,
-          provider: "google_cse",
-        });
-    }
+    const scoped = await tryScopedSearch();
+    const scopedHit = searchHit(scoped);
+    if (scopedHit) return scopedHit;
 
-    if (guessedOnly && !openWebDiscoveryEnabled()) {
-      const openBrave = await tryOpenBrave();
-      if (openBrave)
-        return withResolved({
-          url: openBrave.url,
-          sourceKind: openBrave.sourceKind,
-          provider: "brave",
-        });
-      const openGoogle = await tryOpenGoogle();
-      if (openGoogle)
-        return withResolved({
-          url: openGoogle.url,
-          sourceKind: openGoogle.sourceKind,
-          provider: "google_cse",
-        });
-    }
+    const open = await tryOpenSearch();
+    const openHit = searchHit(open);
+    if (openHit) return openHit;
 
     return withResolved({ url: null, sourceKind: null, provider: null });
   }
 
-  if (!openWebDiscoveryEnabled()) {
-    return withResolved({ url: null, sourceKind: null, provider: null });
-  }
+  const openOnly = await tryOpenSearch();
+  const openOnlyHit = searchHit(openOnly);
+  if (openOnlyHit) return openOnlyHit;
 
-  if (prefer === "google_cse" || prefer === "google") {
-    const g = await tryOpenGoogle();
-    if (g)
-      return withResolved({
-        url: g.url,
-        sourceKind: g.sourceKind,
-        provider: "google_cse",
-      });
-    const b = await tryOpenBrave();
-    if (b)
-      return withResolved({
-        url: b.url,
-        sourceKind: b.sourceKind,
-        provider: "brave",
-      });
-    return withResolved({ url: null, sourceKind: null, provider: null });
-  }
-
-  const openBrave = await tryOpenBrave();
-  if (openBrave)
-    return withResolved({
-      url: openBrave.url,
-      sourceKind: openBrave.sourceKind,
-      provider: "brave",
-    });
-  const openGoogle = await tryOpenGoogle();
-  if (openGoogle)
-    return withResolved({
-      url: openGoogle.url,
-      sourceKind: openGoogle.sourceKind,
-      provider: "google_cse",
-    });
   return withResolved({ url: null, sourceKind: null, provider: null });
 }

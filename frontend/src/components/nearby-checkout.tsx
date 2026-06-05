@@ -23,7 +23,6 @@ export function NearbyCheckout() {
     loading,
     err,
     geoLoading,
-    geoMsg,
     hasLocation,
     nearby,
     gpsLat,
@@ -31,9 +30,6 @@ export function NearbyCheckout() {
     searchLat,
     searchLng,
     selectedMatch,
-    setActiveTier,
-    oneTapBanner,
-    setOneTapBanner,
     setPlaceCategoryHint,
     selectedKey,
     applyMatch,
@@ -45,15 +41,17 @@ export function NearbyCheckout() {
   const selectedCategory = selectedMatch ? matchCategory(selectedMatch) : null;
 
   return (
-    <section id="nearby" className="scroll-mt-24 space-y-6">
-      {oneTapBanner ? (
-        <StatusMessage
-          variant="info"
-          className="border-primary/30 bg-primary/5 font-medium text-primary"
-        >
-          {oneTapBanner}
-        </StatusMessage>
-      ) : null}
+    <section id="nearby" className="scroll-mt-20 space-y-6">
+      <SurfaceCard className="relative z-40 overflow-visible p-4 sm:p-5 [&_[data-slot=card]]:overflow-visible">
+        <MerchantInput
+          value={merchant}
+          onChange={setMerchant}
+          onUserInput={() => setPlaceCategoryHint(null)}
+          onPick={onMerchantPick}
+          locationLat={searchLat ?? gpsLat}
+          locationLng={searchLng ?? gpsLng}
+        />
+      </SurfaceCard>
 
       <SurfaceCard className="overflow-hidden border-violet-500/20 bg-gradient-to-br from-violet-500/[0.07] via-card to-blue-500/[0.05] p-0">
         <div className="border-b border-border/60 p-4 sm:p-5">
@@ -68,7 +66,7 @@ export function NearbyCheckout() {
                     Pay nearby
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    Find stores around you and pick the best card
+                    Map and list update when you share location or search an area
                   </p>
                 </div>
               </div>
@@ -105,9 +103,6 @@ export function NearbyCheckout() {
                   : "Use my location"}
             </Button>
           </div>
-          {geoMsg ? (
-            <p className="mt-3 text-xs text-muted-foreground">{geoMsg}</p>
-          ) : null}
         </div>
 
         <div className="p-4 sm:p-5">
@@ -123,7 +118,6 @@ export function NearbyCheckout() {
             onSearchThisArea={(lat, lng) => void searchThisArea(lat, lng)}
             onSelect={(m) => {
               applyMatch(m);
-              setOneTapBanner(null);
             }}
           />
         </div>
@@ -136,15 +130,6 @@ export function NearbyCheckout() {
         }}
         className="space-y-6"
       >
-        <SurfaceCard className="p-4 sm:p-5">
-          <MerchantInput
-            value={merchant}
-            onChange={setMerchant}
-            onUserInput={() => setPlaceCategoryHint(null)}
-            onPick={onMerchantPick}
-          />
-        </SurfaceCard>
-
         {err ? (
           <StatusMessage variant="error">
             <pre className="overflow-x-auto text-xs">{err}</pre>

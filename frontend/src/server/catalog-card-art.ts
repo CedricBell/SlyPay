@@ -1,8 +1,14 @@
+import { catalogCardImageApiPath } from "@/lib/catalog-image-paths";
+import { catalogImageSrcForDisplay } from "@/lib/catalog-image-display";
 import {
   CARD_CATALOG_ENTRIES,
   CURATED_CATALOG_IMAGE_URLS,
 } from "@/server/card-catalog.entries";
 import type { CardCatalogEntry } from "@/server/card-catalog.types";
+import {
+  VARIANT_TIER_TOKENS,
+  variantTokensAbsentFromCardName,
+} from "@/server/card-intelligence/pdf-discovery-query";
 
 function normalizeKey(s: string): string {
   return s
@@ -23,16 +29,25 @@ export function resolveCatalogImageUrlByIssuerAndName(
   const nameN = normalizeKey(cardName);
   if (!issuerN || !nameN) return undefined;
 
+  const nameTiers = VARIANT_TIER_TOKENS.filter((t) =>
+    new RegExp(`\\b${t}\\b`, "i").test(nameN),
+  );
+
   let best: { url: string; score: number } | null = null;
 
   for (const entry of CARD_CATALOG_ENTRIES) {
     if (normalizeKey(entry.issuer) !== issuerN) continue;
     const entryNameN = normalizeKey(entry.name);
+    const entryBlob = `${entry.id} ${entryNameN}`;
     const url =
       CURATED_CATALOG_IMAGE_URLS[entry.id] ??
       entry.imageUrl ??
       undefined;
     if (!url?.trim() || isPlaceholderImageUrl(url)) continue;
+
+    if (nameTiers.some((tier) => !entryBlob.includes(tier))) {
+      continue;
+    }
 
     let score = 0;
     if (entryNameN === nameN) score += 200;
@@ -40,11 +55,20 @@ export function resolveCatalogImageUrlByIssuerAndName(
       score += 90;
     } else {
       const terms = nameN.split(" ").filter((t) => t.length > 2);
+      let matched = 0;
       for (const t of terms) {
-        if (entryNameN.includes(t)) score += 15;
+        if (entryNameN.includes(t) || entry.id.includes(t)) matched++;
       }
+      if (matched < Math.min(2, terms.length)) continue;
+      score += matched * 15;
     }
-    if (score >= 36 && (!best || score > best.score)) {
+
+    for (const tier of variantTokensAbsentFromCardName(cardName, issuer)) {
+      if (new RegExp(`\\b${tier}\\b`, "i").test(entryBlob)) score -= 200;
+    }
+
+    const minScore = entryNameN === nameN ? 180 : 110;
+    if (score >= minScore && (!best || score > best.score)) {
       best = { url: url.trim(), score };
     }
   }
@@ -70,7 +94,11 @@ export function resolveCatalogImageUrl(
     CARD_CATALOG_ENTRIES.find((e) => e.id === slug)?.imageUrl,
   ];
   for (const url of candidates) {
-    if (url?.trim() && !isPlaceholderImageUrl(url)) return url.trim();
+    if (!url?.trim() || isPlaceholderImageUrl(url)) continue;
+    const trimmed = url.trim();
+    if (catalogImageSrcForDisplay(trimmed)) return trimmed;
+    // Issuer CDN blocked in browser — serve Postgres blob if we have a slug.
+    if (slug) return catalogCardImageApiPath(slug);
   }
   return undefined;
 }

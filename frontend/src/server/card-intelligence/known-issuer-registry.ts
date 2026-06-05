@@ -1,4 +1,9 @@
 import { prisma } from "@/lib/prisma";
+import {
+  detectCoBrandContext,
+  isKnownBankIssuer,
+  shouldPreserveBankIssuerFromRetailerPdf,
+} from "@/server/card-intelligence/co-brand-discovery";
 import { isPlaceholderIssuerForOpenSearch } from "@/server/card-intelligence/pdf-discovery-query";
 
 /**
@@ -51,11 +56,26 @@ export async function recordKnownIssuerAfterPdfVerified(args: {
     return { issuerForRestOfJob: args.productIssuer };
   }
 
+  const coBrand = detectCoBrandContext(args.productIssuer, args.productName);
+  if (
+    shouldPreserveBankIssuerFromRetailerPdf(
+      args.productIssuer,
+      hostname,
+      coBrand,
+    )
+  ) {
+    return { issuerForRestOfJob: args.productIssuer };
+  }
+
   const apexDomain = hostKeyForKnownIssuer(hostname);
   const displayName = deriveIssuerDisplayNameFromHostAndCard(
     args.productName,
     hostname,
   );
+
+  if (isKnownBankIssuer(args.productIssuer) && coBrand) {
+    return { issuerForRestOfJob: args.productIssuer };
+  }
 
   await prisma.knownIssuer.upsert({
     where: { apexDomain },

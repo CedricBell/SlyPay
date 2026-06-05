@@ -66,6 +66,12 @@ enum CardBenefitKind {
   LOYALTY
 }
 
+enum CardWalletContributionStatus {
+  PENDING
+  APPLIED
+  DISMISSED
+}
+
 /// Canonical issuer-document-derived rewards snapshot keyed by catalog slug (matches autocomplete ids).
 model CardCatalogProduct {
   slug                  String    @id
@@ -193,6 +199,7 @@ model User {
   updatedAt DateTime @updatedAt
 
   creditCards             CreditCard[]
+  cardWalletContributions CardWalletContribution[]
   transactions            Transaction[]
   recommendations         Recommendation[]
   recommendationFeedbacks RecommendationFeedback[]
@@ -215,11 +222,28 @@ model CreditCard {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
-  offers      Offer[]
-  intelJobs   CardIntelJob[]
+  offers         Offer[]
+  intelJobs      CardIntelJob[]
+  contributions  CardWalletContribution[]
 
   @@index([userId, isActive])
   @@index([catalogProductSlug])
+}
+
+/// User-reported missing or incorrect card info (admin review).
+model CardWalletContribution {
+  id           String                     @id @default(cuid())
+  creditCardId String
+  creditCard   CreditCard                 @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body         String
+  status       CardWalletContributionStatus @default(PENDING)
+  createdAt    DateTime                   @default(now())
+  reviewedAt   DateTime?
+
+  @@index([creditCardId, status])
+  @@index([userId])
 }
 
 model RewardRule {

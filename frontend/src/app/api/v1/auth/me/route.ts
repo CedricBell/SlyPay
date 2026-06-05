@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 import { getSessionAppUser } from "@/lib/session-user";
 
 const patchBody = z.object({
@@ -9,9 +10,39 @@ const patchBody = z.object({
 });
 
 export async function GET() {
+  const supabase = await createClient();
+  const {
+    data: { user: authUser },
+  } = await supabase.auth.getUser();
+
+  if (!authUser?.id) {
+    return NextResponse.json(
+      { message: "Not signed in", code: "no_server_session" },
+      { status: 401 },
+    );
+  }
+
+  const existing = await prisma.user.findUnique({
+    where: { id: authUser.id },
+    select: { isActive: true },
+  });
+  if (existing && !existing.isActive) {
+    return NextResponse.json(
+      { message: "This account has been disabled.", code: "inactive" },
+      { status: 401 },
+    );
+  }
+
   const ctx = await getSessionAppUser();
   if (!ctx) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      {
+        message:
+          "Could not load your profile. Try signing in again in a moment.",
+        code: "profile_unavailable",
+      },
+      { status: 401 },
+    );
   }
 
   const user = await prisma.user.findUniqueOrThrow({

@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(
     hits.map((h) => ({
       ...h,
-      imageUrl: catalogImageSrcForDisplay(h.imageUrl) ?? h.imageUrl,
+      imageUrl: catalogImageSrcForDisplay(h.imageUrl),
     })),
   );
 }

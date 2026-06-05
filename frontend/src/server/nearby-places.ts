@@ -4,6 +4,10 @@ import {
   hintFromOsmTags,
   resolvePlaceCategoryHint,
 } from "@/lib/place-category-hint";
+import {
+  getGooglePlacesApiKey,
+  googlePlacesPost,
+} from "@/server/google-places-client";
 
 export type EnrichedPlace = {
   name: string;
@@ -55,7 +59,7 @@ function buildOverpassQuery(lat: number, lng: number, radius: number): string {
     "pharmacy|fuel|restaurant|fast_food|cafe|bar|pub|biergarten|food_court|ice_cream|marketplace|bank|atm|cinema|theatre|nightclub|charging_station|car_wash|dentist|doctors|clinic|hospital|car_rental|bicycle_rental";
   const leisure =
     "fitness_centre|sports_centre|bowling_alley|amusement_arcade|adult_gaming_centre";
-  const tourism = "hotel|guest_house|motel|hostel|attraction|museum|gallery";
+  const tourism = "hotel|guest_house|motel|hostel";
 
   return `
 [out:json][timeout:15];
@@ -136,56 +140,94 @@ type GoogleNearbyResponse = {
   }>;
 };
 
-async function fetchGoogleNearbyPlaces(
+/** Table A place types — batched to avoid INVALID_ARGUMENT and omit tourist landmarks. */
+const GOOGLE_NEARBY_TYPE_BATCHES: string[][] = [
+  ["restaurant", "cafe", "bar", "bakery", "meal_takeaway", "meal_delivery"],
+  ["supermarket", "grocery_store", "convenience_store"],
+  ["gas_station", "pharmacy"],
+  [
+    "clothing_store",
+    "electronics_store",
+    "department_store",
+    "shopping_mall",
+    "home_goods_store",
+    "hardware_store",
+    "book_store",
+    "pet_store",
+    "furniture_store",
+    "jewelry_store",
+    "shoe_store",
+    "sporting_goods_store",
+    "liquor_store",
+  ],
+];
+
+const GOOGLE_LANDMARK_ONLY = new Set([
+  "tourist_attraction",
+  "locality",
+  "political",
+  "administrative_area_level_1",
+  "administrative_area_level_2",
+  "neighborhood",
+  "sublocality",
+  "sublocality_level_1",
+  "route",
+  "park",
+  "town_square",
+  "plaza",
+  "historical_landmark",
+  "monument",
+]);
+
+function googlePlaceIsSpendVenue(
+  types: string[] | undefined,
+  name: string,
+): boolean {
+  if (resolvePlaceCategoryHint({ name, fromTags: hintFromGoogleTypes(types) })) {
+    return true;
+  }
+  if (!types?.length) return false;
+  const meaningful = types.filter(
+    (t) =>
+      !GOOGLE_LANDMARK_ONLY.has(t) &&
+      t !== "point_of_interest" &&
+      t !== "establishment" &&
+      t !== "geocode" &&
+      t !== "premise",
+  );
+  return meaningful.length > 0;
+}
+
+async function fetchGoogleNearbyBatch(
   lat: number,
   lng: number,
-  apiKey: string,
+  includedTypes: string[],
 ): Promise<EnrichedPlace[]> {
-  const body = {
-    includedTypes: [
-      "restaurant",
-      "cafe",
-      "bar",
-      "supermarket",
-      "pharmacy",
-      "gas_station",
-      "clothing_store",
-      "electronics_store",
-      "department_store",
-      "shopping_mall",
-    ],
-    maxResultCount: 20,
-    locationRestriction: {
-      circle: {
-        center: { latitude: lat, longitude: lng },
-        radius: 500,
-      },
-    },
-  };
-
-  const res = await fetch(
-    "https://places.googleapis.com/v1/places:searchNearby",
+  const result = await googlePlacesPost<GoogleNearbyResponse>(
+    "places:searchNearby",
     {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Goog-Api-Key": apiKey,
-        "X-Goog-FieldMask": "places.displayName,places.location,places.types",
+      includedTypes,
+      maxResultCount: 20,
+      locationRestriction: {
+        circle: {
+          center: { latitude: lat, longitude: lng },
+          radius: 1500,
+        },
       },
-      body: JSON.stringify(body),
-      cache: "no-store",
+      rankPreference: "DISTANCE",
     },
+    "places.displayName,places.location,places.types",
   );
 
-  if (!res.ok) return [];
-  const data = (await res.json()) as GoogleNearbyResponse;
+  if (!result.ok) return [];
   const out: EnrichedPlace[] = [];
 
-  for (const p of data.places ?? []) {
+  for (const p of result.data.places ?? []) {
     const name = p.displayName?.text?.trim();
     const plat = p.location?.latitude;
     const plng = p.location?.longitude;
     if (!name || typeof plat !== "number" || typeof plng !== "number") continue;
+    if (!googlePlaceIsSpendVenue(p.types, name)) continue;
 
     out.push({
       name,
@@ -203,6 +245,18 @@ async function fetchGoogleNearbyPlaces(
   return out;
 }
 
+async function fetchGoogleNearbyPlaces(
+  lat: number,
+  lng: number,
+): Promise<EnrichedPlace[]> {
+  const batches = await Promise.all(
+    GOOGLE_NEARBY_TYPE_BATCHES.map((types) =>
+      fetchGoogleNearbyBatch(lat, lng, types),
+    ),
+  );
+  return batches.flat();
+}
+
 function mergePlaces(lists: EnrichedPlace[]): EnrichedPlace[] {
   const best = new Map<string, EnrichedPlace>();
   for (const p of lists) {
@@ -215,9 +269,20 @@ function mergePlaces(lists: EnrichedPlace[]): EnrichedPlace[] {
       best.set(key, { ...prev, suggestedCategoryHint: p.suggestedCategoryHint });
     }
   }
+  const spendRank = (hint: SpendCategory | null) => {
+    if (!hint) return 0;
+    if (hint === SpendCategory.TRAVEL) return 1;
+    return 2;
+  };
+
   return [...best.values()]
-    .sort((a, b) => a.distanceMeters - b.distanceMeters)
-    .slice(0, 48);
+    .sort((a, b) => {
+      const rank =
+        spendRank(b.suggestedCategoryHint) - spendRank(a.suggestedCategoryHint);
+      if (rank !== 0) return rank;
+      return a.distanceMeters - b.distanceMeters;
+    })
+    .slice(0, 80);
 }
 
 export async function loadNearbyPlaces(
@@ -226,17 +291,29 @@ export async function loadNearbyPlaces(
 ): Promise<{
   places: EnrichedPlace[];
   sources: Array<"osm" | "google">;
+  googleConfigured: boolean;
+  googleError?: string;
 }> {
-  const apiKey = process.env.GOOGLE_PLACES_API_KEY?.trim();
-  const osmPromise = fetchOsmPlaces(lat, lng, 500);
+  const apiKey = getGooglePlacesApiKey();
+  const osmPromise = fetchOsmPlaces(lat, lng, 1200);
+  let googleError: string | undefined;
   const googlePromise = apiKey
-    ? fetchGoogleNearbyPlaces(lat, lng, apiKey)
-    : Promise.resolve([]);
+    ? fetchGoogleNearbyPlaces(lat, lng).catch((e) => {
+        googleError =
+          e instanceof Error ? e.message : "Google nearby search failed";
+        return [] as EnrichedPlace[];
+      })
+    : Promise.resolve([] as EnrichedPlace[]);
 
   const [osm, google] = await Promise.all([osmPromise, googlePromise]);
   const sources: Array<"osm" | "google"> = ["osm"];
   if (google.length) sources.push("google");
 
   const merged = mergePlaces([...osm, ...google]);
-  return { places: merged, sources };
+  return {
+    places: merged,
+    sources,
+    googleConfigured: Boolean(apiKey),
+    ...(googleError ? { googleError } : {}),
+  };
 }

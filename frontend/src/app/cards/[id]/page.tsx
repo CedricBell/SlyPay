@@ -7,8 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatusMessage } from "@/components/status-message";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, inputClassName } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { inputClassName } from "@/components/ui/field";
 import { Label } from "@/components/ui/label";
 import { SurfaceCard } from "@/components/ui/surface-card";
 import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
@@ -54,9 +53,9 @@ export default function EditCardPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [issuer, setIssuer] = useState("");
-  const [last4, setLast4] = useState("");
-  const [colorHex, setColorHex] = useState("#0f172a");
   const [isActive, setIsActive] = useState(true);
+  const [missingNote, setMissingNote] = useState("");
+  const [missingNoteSent, setMissingNoteSent] = useState(false);
   const [rules, setRules] = useState<CardDetail["rewardRules"]>([]);
   const [catalogImageUrl, setCatalogImageUrl] = useState<string | null>(null);
   const [intel, setIntel] = useState<{
@@ -78,8 +77,6 @@ export default function EditCardPage() {
         const c = await apiFetch<CardDetail>(`/cards/${id}`);
         setName(c.name);
         setIssuer(c.issuer);
-        setLast4(c.last4 ?? "");
-        setColorHex(c.colorHex ?? "#0f172a");
         setIsActive(c.isActive);
         setRules(c.rewardRules);
         setCatalogImageUrl(c.catalogImageUrl ?? null);
@@ -106,11 +103,7 @@ export default function EditCardPage() {
     try {
       await apiFetch(`/cards/${id}`, {
         method: "PATCH",
-        body: JSON.stringify({
-          last4: last4 || undefined,
-          colorHex,
-          isActive,
-        }),
+        body: JSON.stringify({ isActive }),
       });
       router.push("/cards");
     } catch (e) {
@@ -140,6 +133,26 @@ export default function EditCardPage() {
       else setErr("Could not restart rewards lookup");
     } finally {
       setRefreshingIntel(false);
+    }
+  };
+
+  const submitMissingNote = async () => {
+    const body = missingNote.trim();
+    if (body.length < 8) {
+      setErr("Please describe what’s missing (at least 8 characters).");
+      return;
+    }
+    setErr(null);
+    try {
+      await apiFetch(`/cards/${id}/contributions`, {
+        method: "POST",
+        body: JSON.stringify({ body }),
+      });
+      setMissingNote("");
+      setMissingNoteSent(true);
+    } catch (e) {
+      if (e instanceof ApiError) setErr(formatCaughtApiError(e));
+      else setErr("Could not send note");
     }
   };
 
@@ -173,8 +186,6 @@ export default function EditCardPage() {
         <CardThumbnail
           name={name || "Card"}
           issuer={issuer || "Issuer"}
-          last4={last4 || null}
-          colorHex={colorHex}
           imageUrl={catalogImageUrl}
           size="lg"
         />
@@ -193,25 +204,27 @@ export default function EditCardPage() {
         ) : null}
       </SurfaceCard>
 
+      {intelHasFailed(intelJob) ? (
+        <StatusMessage variant="error">
+          {intelJob?.errorMessage?.slice(0, 280) ?? "Rewards lookup failed."}
+          <div className="mt-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={refreshingIntel}
+              onClick={() => void refreshIntel()}
+            >
+              {refreshingIntel ? "Retrying…" : "Retry rewards lookup"}
+            </Button>
+          </div>
+        </StatusMessage>
+      ) : null}
+      {intel?.walletScoreAnalyzing ? (
+        <p className="text-sm text-muted-foreground">Analyzing rewards from official documentation…</p>
+      ) : null}
+
       <form onSubmit={save} className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Last 4 digits">
-            <Input
-              className={inputClassName}
-              value={last4}
-              maxLength={4}
-              onChange={(e) => setLast4(e.target.value)}
-            />
-          </Field>
-          <Field label="Accent color">
-            <Input
-              type="color"
-              className="h-10 cursor-pointer p-1"
-              value={colorHex}
-              onChange={(e) => setColorHex(e.target.value)}
-            />
-          </Field>
-        </div>
         <div className="flex items-center gap-2">
           <Checkbox
             id="is-active"
@@ -222,42 +235,6 @@ export default function EditCardPage() {
             Active (inactive cards are ignored by the engine)
           </Label>
         </div>
-
-        {intel &&
-          (intel.catalogSlug ||
-            intel.officialDocumentUrl ||
-            intel.hasOfficialPdfExtract) && (
-            <SurfaceCard className="border-violet-500/30 bg-violet-500/5 p-4 text-sm">
-              <p className="font-semibold text-primary">Catalog intelligence</p>
-              {intelHasFailed(intelJob) ? (
-                <div className="mt-3 space-y-2">
-                  <StatusMessage variant="error">
-                    {intelJob?.errorMessage?.slice(0, 200) ??
-                      "Rewards lookup failed."}
-                  </StatusMessage>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={refreshingIntel}
-                    onClick={() => void refreshIntel()}
-                  >
-                    {refreshingIntel ? "Retrying…" : "Retry rewards lookup"}
-                  </Button>
-                </div>
-              ) : null}
-              {intel.walletScoreAnalyzing ? (
-                <p className="mt-2 text-muted-foreground">Analyzing rewards…</p>
-              ) : null}
-              {intel.officialDocumentUrl ? (
-                <Button variant="link" className="mt-2 h-auto p-0" asChild>
-                  <a href={intel.officialDocumentUrl} target="_blank" rel="noreferrer">
-                    Official PDF
-                  </a>
-                </Button>
-              ) : null}
-            </SurfaceCard>
-          )}
 
         {rules.length > 0 ? (
           <SurfaceCard className="p-4">
@@ -283,19 +260,26 @@ export default function EditCardPage() {
           </SurfaceCard>
         ) : null}
 
+        {intel?.officialDocumentUrl ? (
+          <p className="text-sm">
+            <a
+              href={intel.officialDocumentUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary underline"
+            >
+              Official card documentation
+            </a>
+          </p>
+        ) : null}
+
         {intel?.walletPreview &&
-        (intel.walletPreview.benefitsSummary ||
-          intel.walletPreview.statementCreditHints.length > 0 ||
+        (intel.walletPreview.statementCreditHints.length > 0 ||
           intel.walletPreview.protectionHints.length > 0) ? (
           <SurfaceCard className="border-emerald-500/25 bg-emerald-500/5 p-4 text-sm">
             <p className="font-semibold text-emerald-900 dark:text-emerald-100">
-              Card benefits
+              From official documentation
             </p>
-            {intel.walletPreview.benefitsSummary ? (
-              <p className="mt-2 text-muted-foreground">
-                {intel.walletPreview.benefitsSummary}
-              </p>
-            ) : null}
             {(intel.walletPreview.statementCredits?.length ??
               intel.walletPreview.statementCreditHints.length) > 0 && (
               <div className="mt-3">
@@ -354,6 +338,37 @@ export default function EditCardPage() {
             )}
           </SurfaceCard>
         ) : null}
+
+        <SurfaceCard className="p-4 text-sm">
+          <p className="font-medium">Missing something?</p>
+          <p className="mt-1 text-muted-foreground">
+            Tell us what benefit or rule is wrong or missing. An admin will review
+            before it affects recommendations.
+          </p>
+          {missingNoteSent ? (
+            <StatusMessage variant="success" className="mt-3">
+              Thanks — your note was sent for review.
+            </StatusMessage>
+          ) : (
+            <>
+              <textarea
+                className={`${inputClassName} mt-3 min-h-[88px] w-full resize-y`}
+                placeholder="e.g. Missing return protection, wrong Uber credit amount…"
+                value={missingNote}
+                onChange={(e) => setMissingNote(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                onClick={() => void submitMissingNote()}
+              >
+                Send for review
+              </Button>
+            </>
+          )}
+        </SurfaceCard>
 
         {err ? <StatusMessage variant="error">{err}</StatusMessage> : null}
 

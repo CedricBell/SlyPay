@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { Copy, Check, Sparkles, CreditCard, Gift, Shield, BadgeCheck } from "lucide-react";
+import { Copy, Check } from "lucide-react";
 import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
 import { CardThumbnail } from "@/components/CardThumbnail";
 import { StatusMessage } from "@/components/status-message";
@@ -10,11 +10,8 @@ import { Button } from "@/components/ui/button";
 import { SurfaceCard } from "@/components/ui/surface-card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import {
-  formatStatementCreditLine,
-  formatProtectionLine,
-  type CardSpendBenefits,
-} from "@/lib/recommendation-benefits";
+import type { CardSpendBenefits } from "@/lib/recommendation-benefits";
+import { ContextualBenefitsList } from "@/components/ContextualBenefitsList";
 import { categoryLabelFromUi } from "@/lib/spend-category-ui";
 import type { SpendCategory } from "@prisma/client";
 
@@ -36,161 +33,11 @@ type Ranked = {
   rateLabel: string;
   last4?: string | null;
   colorHex?: string | null;
+  catalogImageUrl?: string | null;
   benefits: CardSpendBenefits;
   explanationLines: string[];
   catalogRotatingQuarters?: RotatingQuarter[] | null;
 };
-
-function formatIsoRange(from: string, until: string): string {
-  try {
-    const a = new Date(from);
-    const b = new Date(until);
-    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return "";
-    const opts: Intl.DateTimeFormatOptions = {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    };
-    return `${a.toLocaleDateString(undefined, opts)} – ${b.toLocaleDateString(undefined, opts)}`;
-  } catch {
-    return "";
-  }
-}
-
-function BenefitsPanel({
-  benefits,
-  compact,
-}: {
-  benefits: CardSpendBenefits;
-  compact?: boolean;
-}) {
-  const hasCredits = benefits.statementCredits.length > 0;
-  const hasProtections = benefits.protections.length > 0;
-  const hasLoyalty = benefits.loyaltyPerks.length > 0;
-  const hasCaveats = benefits.relevantCaveats.length > 0;
-
-  return (
-    <div className={compact ? "space-y-2" : "space-y-3"}>
-      {benefits.merchantExclusionNotes.length > 0 && (
-        <StatusMessage variant="warning" className="text-xs">
-          {benefits.merchantExclusionNotes.join(" ")}
-        </StatusMessage>
-      )}
-
-      {benefits.benefitsSummary && !compact && (
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {benefits.benefitsSummary}
-        </p>
-      )}
-
-      <div>
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Earn rate
-        </p>
-        <ul className="mt-1 space-y-1">
-          {benefits.categoryEarnLines.map((line, i) => (
-            <li key={`earn-${i}`} className="flex gap-2 text-sm">
-              <Sparkles className="mt-0.5 size-3.5 shrink-0 text-violet-500" />
-              <span>{line}</span>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      {hasCredits && (
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-            Credits & reimbursements
-          </p>
-          <ul className="mt-1 space-y-1.5">
-            {benefits.statementCredits.map((c, i) => (
-              <li key={`sc-${i}`} className="flex gap-2 text-sm">
-                <Gift className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
-                <span>{formatStatementCreditLine(c)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {hasProtections && (
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:text-sky-400">
-            Protections & insurance
-          </p>
-          <ul className="mt-1 space-y-1.5">
-            {benefits.protections.map((p, i) => (
-              <li key={`pr-${i}`} className="flex gap-2 text-sm">
-                <Shield className="mt-0.5 size-3.5 shrink-0 text-sky-600" />
-                <span>{formatProtectionLine(p)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {(benefits.perks.length > 0 || benefits.welcomeOffer) && (
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-400">
-            Card perks
-          </p>
-          <ul className="mt-1 space-y-1">
-            {benefits.welcomeOffer && (
-              <li className="flex gap-2 text-sm">
-                <BadgeCheck className="mt-0.5 size-3.5 shrink-0 text-indigo-600" />
-                <span>{benefits.welcomeOffer}</span>
-              </li>
-            )}
-            {benefits.perks.map((p, i) => (
-              <li key={`pk-${i}`} className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{p.title}</span>
-                {" — "}
-                {p.description}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {hasLoyalty && (
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-400">
-            Loyalty & status perks
-          </p>
-          <ul className="mt-1 space-y-1">
-            {benefits.loyaltyPerks.map((p, i) => (
-              <li key={`lp-${i}`} className="text-sm text-muted-foreground">
-                {p}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {hasCaveats && (
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-            Fine print
-          </p>
-          <ul className="mt-1 space-y-1">
-            {benefits.relevantCaveats.map((c, i) => (
-              <li key={`cv-${i}`} className="text-xs text-muted-foreground">
-                {c}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {!compact && benefits.summarySnippet && (
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {benefits.summarySnippet}
-          {benefits.summarySnippet.length >= 320 ? "…" : ""}
-        </p>
-      )}
-    </div>
-  );
-}
 
 export type MismatchKind =
   | "WRONG_MERCHANT"
@@ -207,6 +54,7 @@ type Props = {
     issuer: string;
     last4: string | null;
     colorHex?: string | null;
+    catalogImageUrl?: string | null;
   } | null;
   bestCardBenefits?: CardSpendBenefits | null;
   reasoning: string[];
@@ -240,7 +88,6 @@ export function RecommendationCard({
   evaluationDate,
   bestCard,
   bestCardBenefits,
-  reasoning,
   ranked,
   alternatesTied,
   trace,
@@ -353,43 +200,18 @@ export function RecommendationCard({
           </StatusMessage>
         )}
 
-        {bestCardBenefits && (
-          <SurfaceCard className="border-violet-500/25 bg-violet-500/[0.04] p-4">
-            <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-violet-800 dark:text-violet-200">
-              <CreditCard className="size-3.5" />
-              Why {bestCard?.name ?? "this card"}
-            </p>
-            <div className="mt-3">
-              <BenefitsPanel benefits={bestCardBenefits} />
-            </div>
-          </SurfaceCard>
-        )}
-
-        {(trace.length > 0 || reasoning.length > 0) && (
+        {trace.length > 0 && (
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
               How we classified this spend
             </p>
             <ul className="mt-2 space-y-1.5">
               {trace.map((t, i) => (
-                <li key={`t-${i}`} className="flex gap-2">
+                <li key={`t-${i}`} className="flex gap-2 text-muted-foreground">
                   <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-violet-500" />
                   <span>{t}</span>
                 </li>
               ))}
-              {reasoning
-                .filter(
-                  (t) =>
-                    !bestCardBenefits?.categoryEarnLines.some((l) =>
-                      t.includes(l.slice(0, 12)),
-                    ),
-                )
-                .map((t, i) => (
-                  <li key={`r-${i}`} className="flex gap-2 text-muted-foreground">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400" />
-                    <span>{t}</span>
-                  </li>
-                ))}
             </ul>
           </div>
         )}
@@ -408,7 +230,7 @@ export function RecommendationCard({
             </p>
             {marketBest.benefits && (
               <div className="mt-3 border-t border-blue-500/15 pt-3">
-                <BenefitsPanel benefits={marketBest.benefits} compact />
+                <ContextualBenefitsList benefits={marketBest.benefits} />
               </div>
             )}
           </div>
@@ -417,7 +239,8 @@ export function RecommendationCard({
         {ranked.length > 0 && (
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              Every card in your wallet
+              Your wallet for {categoryLabel.toLowerCase()}
+              {merchantLabel ? ` at ${merchantLabel}` : ""}
             </p>
             <ol className="mt-3 space-y-3">
               {ranked.map((r, idx) => (
@@ -434,6 +257,7 @@ export function RecommendationCard({
                         <CardThumbnail
                           name={r.cardName}
                           issuer={r.issuer}
+                          imageUrl={r.catalogImageUrl}
                           last4={r.last4}
                           colorHex={r.colorHex}
                           size="xs"
@@ -458,33 +282,13 @@ export function RecommendationCard({
                       </span>
                     </div>
                     <div className="mt-3 border-t border-border/50 pt-3 pl-11">
-                      <BenefitsPanel benefits={r.benefits} compact />
+                      <ContextualBenefitsList
+                        benefits={r.benefits}
+                        rotatingQuarters={r.catalogRotatingQuarters}
+                        emptyHint="No extra perks for this category beyond the rate above."
+                      />
                     </div>
                   </li>
-                  {r.catalogRotatingQuarters &&
-                    r.catalogRotatingQuarters.length > 0 && (
-                      <li className="ml-8 list-none border-l border-border pl-3 text-[11px] text-muted-foreground">
-                        <p className="font-semibold">Rotating bonuses</p>
-                        <ul className="mt-1 space-y-1">
-                          {r.catalogRotatingQuarters.map((q, qi) => (
-                            <li key={qi}>
-                              <span>{q.label}</span>
-                              {q.categories?.length ? (
-                                <span className="ml-1 font-mono text-[10px]">
-                                  · {q.categories.join(", ")} · {q.multiplier}%
-                                </span>
-                              ) : null}
-                              <span className="mt-0.5 block text-[10px]">
-                                {formatIsoRange(q.validFrom, q.validUntil)}
-                              </span>
-                              {q.details ? (
-                                <span className="mt-0.5 block italic">{q.details}</span>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ul>
-                      </li>
-                    )}
                 </Fragment>
               ))}
             </ol>
@@ -497,6 +301,7 @@ export function RecommendationCard({
               <CardThumbnail
                 name={bestCard.name}
                 issuer={bestCard.issuer}
+                imageUrl={bestCard.catalogImageUrl}
                 last4={bestCard.last4}
                 colorHex={bestCard.colorHex}
                 size="lg"

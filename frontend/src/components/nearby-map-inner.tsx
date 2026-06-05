@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import {
   GoogleMap,
@@ -59,36 +59,13 @@ export function NearbyMapInner({
   const [infoKey, setInfoKey] = useState<string | null>(null);
   const [showSearchHere, setShowSearchHere] = useState(false);
   const searchCenterRef = useRef({ lat: searchLat, lng: searchLng });
+  /** True while a "Search this area" request is in flight (skip fit until it finishes). */
+  const areaSearchLockRef = useRef(false);
+  /** Stop passing center/zoom props so React does not reset zoom after pan/search. */
+  const [cameraPropsReleased, setCameraPropsReleased] = useState(false);
 
-  const mapCenter = useMemo(
-    () => ({ lat: searchLat, lng: searchLng }),
-    [searchLat, searchLng],
-  );
-
-  useEffect(() => {
-    searchCenterRef.current = { lat: searchLat, lng: searchLng };
-    setShowSearchHere(false);
-    const map = mapRef.current;
-    if (!map) return;
-    const bounds = new google.maps.LatLngBounds();
-    bounds.extend({ lat: searchLat, lng: searchLng });
-    if (gpsLat != null && gpsLng != null) {
-      bounds.extend({ lat: gpsLat, lng: gpsLng });
-    }
-    for (const m of matches) {
-      bounds.extend({ lat: m.lat, lng: m.lng });
-    }
-    if (matches.length === 0) {
-      map.setCenter({ lat: searchLat, lng: searchLng });
-      map.setZoom(16);
-    } else {
-      map.fitBounds(bounds, 56);
-    }
-  }, [searchLat, searchLng, matches, gpsLat, gpsLng]);
-
-  const onMapLoad = useCallback(
+  const fitMapToResults = useCallback(
     (map: google.maps.Map) => {
-      mapRef.current = map;
       const bounds = new google.maps.LatLngBounds();
       bounds.extend({ lat: searchLat, lng: searchLng });
       if (gpsLat != null && gpsLng != null) {
@@ -107,6 +84,31 @@ export function NearbyMapInner({
     [gpsLat, gpsLng, matches, searchLat, searchLng],
   );
 
+  useEffect(() => {
+    searchCenterRef.current = { lat: searchLat, lng: searchLng };
+    setShowSearchHere(false);
+    const map = mapRef.current;
+    if (!map) return;
+
+    if (areaSearchLockRef.current) {
+      if (!geoLoading) {
+        areaSearchLockRef.current = false;
+      }
+      return;
+    }
+
+    fitMapToResults(map);
+  }, [searchLat, searchLng, matches, geoLoading, fitMapToResults]);
+
+  const onMapLoad = useCallback(
+    (map: google.maps.Map) => {
+      mapRef.current = map;
+      fitMapToResults(map);
+      setCameraPropsReleased(true);
+    },
+    [fitMapToResults],
+  );
+
   const checkMapMoved = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
@@ -123,6 +125,7 @@ export function NearbyMapInner({
     const c = map.getCenter();
     if (!c) return;
     setShowSearchHere(false);
+    areaSearchLockRef.current = true;
     onSearchThisArea(c.lat(), c.lng());
   }, [onSearchThisArea]);
 
@@ -161,12 +164,12 @@ export function NearbyMapInner({
           <Button
             type="button"
             size="sm"
-            variant="default"
+            variant="outline"
             disabled={geoLoading}
             onClick={handleSearchHere}
-            className="pointer-events-auto gap-1.5 rounded-full border border-border/60 bg-background/95 px-4 shadow-lg backdrop-blur-md hover:bg-background dark:bg-card/95"
+            className="pointer-events-auto gap-2 rounded-full border-border bg-background px-4 py-2 text-sm font-semibold text-foreground shadow-lg ring-1 ring-black/10 backdrop-blur-md hover:bg-muted dark:border-border dark:bg-card dark:text-foreground dark:ring-white/10 dark:hover:bg-muted/80 [&_svg]:text-foreground"
           >
-            <Search className="size-3.5" />
+            <Search className="size-4 shrink-0 opacity-90" aria-hidden />
             Search this area
           </Button>
         </div>
@@ -174,8 +177,9 @@ export function NearbyMapInner({
 
       <GoogleMap
         mapContainerStyle={mapStyles}
-        center={mapCenter}
-        zoom={16}
+        {...(cameraPropsReleased
+          ? {}
+          : { center: { lat: searchLat, lng: searchLng }, zoom: 16 })}
         onLoad={onMapLoad}
         onDragEnd={checkMapMoved}
         onZoomChanged={checkMapMoved}

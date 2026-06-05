@@ -18,42 +18,72 @@ import { resolveIntelIssuerAndCardName } from "@/server/catalog-infer";
 import { buildRewardRuleDraftsFromExtract } from "@/server/card-intelligence/build-reward-rule-drafts";
 import { parseRewardsExtract } from "@/server/card-intelligence/rewards-extract-schema";
 import { refineIntelDocumentUrl } from "@/server/card-intelligence/resolve-intel-document";
+import { probeIntelDocumentUrl } from "@/server/card-intelligence/intel-document-probe";
 import { isAncillaryIssuerFeaturePath } from "@/server/card-intelligence/intel-path-bonus";
-import { resolveAndPersistCatalogImage } from "@/server/catalog-card-image";
+import {
+  isGenericIssuerCardHub,
+  isGenericIssuerDisclosureDocument,
+  isIntelSourceCategoryHub,
+  isIssuerApplyFormUrl,
+  isThirdPartyIntelHost,
+  normalizeIntelUrlForExclude,
+} from "@/server/card-intelligence/intel-source-url-quality";
+import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
+import { upsertCatalogProductFromSlug } from "@/server/catalog-db-sync";
 import { sha256Hex, stableSerialize } from "@/server/canonical-hash";
 
-async function syncCatalogPresentation(args: {
-  productSlug: string;
-  issuer: string;
-  cardName: string;
-  currentImageUrl: string | null;
-  officialDocumentUrl?: string | null;
-  documentUrl?: string | null;
-}) {
-  const imageUrl = await resolveAndPersistCatalogImage({
-    productSlug: args.productSlug,
-    issuer: args.issuer,
-    cardName: args.cardName,
-    currentImageUrl: args.currentImageUrl,
-    officialDocumentUrl: args.officialDocumentUrl,
-    documentUrl: args.documentUrl,
-  });
-  if (imageUrl && imageUrl !== args.currentImageUrl) {
-    await prisma.cardCatalogProduct.update({
-      where: { slug: args.productSlug },
-      data: { imageUrl },
-    });
+function catalogOfficialDocumentUrl(productSlug: string): string | null {
+  return (
+    CARD_CATALOG_ENTRIES.find((e) => e.id === productSlug)?.officialDocumentUrl ??
+    null
+  );
+}
+
+async function isAcceptableOfficialDocumentUrl(
+  url: string,
+): Promise<boolean> {
+  if (
+    isIntelSourceCategoryHub(url) ||
+    isGenericIssuerCardHub(url) ||
+    isGenericIssuerDisclosureDocument(url) ||
+    isIssuerApplyFormUrl(url) ||
+    isAncillaryIssuerFeaturePath(url)
+  ) {
+    return false;
+  }
+  try {
+    if (isThirdPartyIntelHost(new URL(url).hostname)) return false;
+  } catch {
+    return false;
+  }
+  const probe = await probeIntelDocumentUrl(url);
+  return probe.reachable || probe.status === 403;
+}
+
+function storedDocumentUrlIsObviouslyBad(
+  url: string | null | undefined,
+): boolean {
+  if (!url?.trim()) return false;
+  if (
+    isIntelSourceCategoryHub(url) ||
+    isGenericIssuerCardHub(url) ||
+    isGenericIssuerDisclosureDocument(url) ||
+    isIssuerApplyFormUrl(url) ||
+    isAncillaryIssuerFeaturePath(url)
+  ) {
+    return true;
+  }
+  try {
+    return isThirdPartyIntelHost(new URL(url).hostname);
+  } catch {
+    return false;
   }
 }
 
-function isAcceptableOfficialDocumentUrl(url: string): boolean {
-  return !isAncillaryIssuerFeaturePath(url);
-}
-
-function resolveDocumentUrl(args: {
+async function resolveDocumentUrl(args: {
   productSlug: string;
   officialDocumentUrl: string | null;
-}): string | null {
+}): Promise<string | null> {
   const overrideSlug = process.env.CARD_INTEL_OVERRIDE_SLUG?.trim();
   const overrideUrl = process.env.CARD_INTEL_OVERRIDE_PDF_URL?.trim();
   if (
@@ -63,9 +93,16 @@ function resolveDocumentUrl(args: {
   ) {
     return overrideUrl;
   }
-  const url = args.officialDocumentUrl;
-  if (url && !isAcceptableOfficialDocumentUrl(url)) return null;
-  return url;
+  const candidates = [
+    args.officialDocumentUrl,
+    catalogOfficialDocumentUrl(args.productSlug),
+  ].filter((u): u is string => Boolean(u?.trim()));
+
+  for (const url of candidates) {
+    if (storedDocumentUrlIsObviouslyBad(url)) continue;
+    if (await isAcceptableOfficialDocumentUrl(url)) return url;
+  }
+  return null;
 }
 
 export async function runCardIntelJob(params: {
@@ -90,6 +127,8 @@ export async function runCardIntelJob(params: {
       data: { status: "RUNNING", startedAt: new Date() },
     });
 
+    await upsertCatalogProductFromSlug(params.productSlug).catch(() => undefined);
+
     const product = await prisma.cardCatalogProduct.findUnique({
       where: { slug: params.productSlug },
     });
@@ -104,13 +143,6 @@ export async function runCardIntelJob(params: {
     if (!forceReanalyze && product.lastExtractHash && existingRuleCount > 0) {
       await prisma.$transaction(async (tx) => {
         await applyCatalogRulesIfMissing(tx, params.productSlug);
-      });
-      await syncCatalogPresentation({
-        productSlug: product.slug,
-        issuer: product.issuer,
-        cardName: product.name,
-        currentImageUrl: product.imageUrl,
-        officialDocumentUrl: product.officialDocumentUrl,
       });
       await prisma.cardIntelJob.update({
         where: { id: job.id },
@@ -133,13 +165,6 @@ export async function runCardIntelJob(params: {
         return applyCatalogRulesIfMissing(tx, params.productSlug);
       });
       if (applied) {
-        await syncCatalogPresentation({
-          productSlug: product.slug,
-          issuer: product.issuer,
-          cardName: product.name,
-          currentImageUrl: product.imageUrl,
-          officialDocumentUrl: product.officialDocumentUrl,
-        });
         await prisma.cardIntelJob.update({
           where: { id: job.id },
           data: {
@@ -155,11 +180,29 @@ export async function runCardIntelJob(params: {
       }
     }
 
-    let url = resolveDocumentUrl({
+    let url = await resolveDocumentUrl({
       productSlug: params.productSlug,
       officialDocumentUrl: product.officialDocumentUrl,
     });
     let sourceKind: IntelDocumentKind | null = null;
+    const excludeDiscoveryUrls: string[] = [];
+
+    if (
+      product.officialDocumentUrl &&
+      (storedDocumentUrlIsObviouslyBad(product.officialDocumentUrl) ||
+        !(await isAcceptableOfficialDocumentUrl(product.officialDocumentUrl)))
+    ) {
+      if (product.officialDocumentUrl) {
+        excludeDiscoveryUrls.push(
+          normalizeIntelUrlForExclude(product.officialDocumentUrl),
+        );
+      }
+      url = null;
+      await prisma.cardCatalogProduct.update({
+        where: { slug: product.slug },
+        data: { officialDocumentUrl: null },
+      });
+    }
 
     let issuerForJob = product.issuer;
     let cardNameForJob = product.name;
@@ -187,6 +230,7 @@ export async function runCardIntelJob(params: {
           issuer: issuerForJob,
           cardName: cardNameForJob,
           productSlug: product.slug,
+          excludeUrls: excludeDiscoveryUrls,
         });
         if (discovered.resolvedIssuer && discovered.resolvedCardName) {
           issuerForJob = discovered.resolvedIssuer;
@@ -216,7 +260,7 @@ export async function runCardIntelJob(params: {
             productSlug: product.slug,
           });
           const candidate = refined.url ?? discovered.url;
-          if (isAcceptableOfficialDocumentUrl(candidate)) {
+          if (await isAcceptableOfficialDocumentUrl(candidate)) {
             url = candidate;
             sourceKind = refined.sourceKind ?? discovered.sourceKind;
             await prisma.cardCatalogProduct.update({
@@ -249,7 +293,7 @@ export async function runCardIntelJob(params: {
       if (
         refined.url &&
         refined.url !== url &&
-        isAcceptableOfficialDocumentUrl(refined.url)
+        (await isAcceptableOfficialDocumentUrl(refined.url))
       ) {
         url = refined.url;
         sourceKind = refined.sourceKind;
@@ -281,15 +325,8 @@ export async function runCardIntelJob(params: {
         Boolean(process.env.GOOGLE_API_KEY?.trim()) &&
         Boolean(process.env.GOOGLE_CSE_ID?.trim());
       const hint = !hasBrave && !hasGoogle
-        ? "Aucune URL de document — uploadez un PDF (admin), ou ajoutez BRAVE_SEARCH_API_KEY, GOOGLE_API_KEY + GOOGLE_CSE_ID, ou officialDocumentUrl."
+        ? "Aucune source officielle trouvée — vérifiez BRAVE_SEARCH_API_KEY et/ou GOOGLE_API_KEY + GOOGLE_CSE_ID (recherche open-web activée par défaut), ou uploadez un PDF (admin)."
         : "Aucune page « rewards / rules » trouvée — uploadez un PDF (admin), vérifiez banque + nom de carte, ou renseignez officialDocumentUrl.";
-      await syncCatalogPresentation({
-        productSlug: product.slug,
-        issuer: issuerForJob,
-        cardName: cardNameForJob,
-        currentImageUrl: product.imageUrl,
-        officialDocumentUrl: product.officialDocumentUrl,
-      });
       await prisma.cardIntelJob.update({
         where: { id: job.id },
         data: {
@@ -379,28 +416,106 @@ export async function runCardIntelJob(params: {
       });
     }
 
-    await syncCatalogPresentation({
-      productSlug: product.slug,
-      issuer: issuerForRestOfJob,
-      cardName: cardNameForJob,
-      currentImageUrl: product.imageUrl,
-      officialDocumentUrl: product.officialDocumentUrl ?? url,
-      documentUrl: resolvedUrl ?? url,
-    });
-
-    const ruleCountAfter = await prisma.rewardRule.count({
+    let ruleCountAfter = await prisma.rewardRule.count({
       where: { catalogProductSlug: params.productSlug },
     });
+    let jobStatus: "COMPLETED" | "FAILED" =
+      ruleCountAfter > 0 || parsed.earnRates.length > 0 ? "COMPLETED" : "FAILED";
+    let jobError: string | null =
+      jobStatus === "COMPLETED"
+        ? null
+        : "Rewards document found but no earn rates could be mapped — try Retry rewards lookup.";
+
+    const resolvedForRetry = resolvedUrl ?? url ?? null;
+    if (
+      jobStatus === "FAILED" &&
+      resolvedForRetry &&
+      !hasUploadedBlob &&
+      excludeDiscoveryUrls.length < 2
+    ) {
+      excludeDiscoveryUrls.push(normalizeIntelUrlForExclude(resolvedForRetry));
+      await prisma.cardCatalogProduct.update({
+        where: { slug: product.slug },
+        data: { officialDocumentUrl: null },
+      });
+      try {
+        const rediscovered = await discoverOfficialPdfUrl({
+          issuer: issuerForRestOfJob,
+          cardName: cardNameForJob,
+          productSlug: product.slug,
+          excludeUrls: excludeDiscoveryUrls,
+        });
+        if (rediscovered.url && rediscovered.sourceKind) {
+          const refined = await refineIntelDocumentUrl({
+            url: rediscovered.url,
+            issuer: issuerForRestOfJob,
+            cardName: cardNameForJob,
+            productSlug: product.slug,
+          });
+          const retryUrl = refined.url ?? rediscovered.url;
+          if (await isAcceptableOfficialDocumentUrl(retryUrl)) {
+            const retryKind = refined.sourceKind ?? rediscovered.sourceKind;
+            const retryFetch = normalizeIntelDocumentFetchUrl(retryUrl);
+            const retryLoaded = await loadCatalogDocumentText({
+              productSlug: product.slug,
+              documentUrl: retryFetch,
+              sourceKind: retryKind,
+            });
+            const retryExtracted = await extractRewardsFromDocumentText({
+              cardName: cardNameForJob,
+              issuer: issuerForRestOfJob,
+              documentText: retryLoaded.text,
+            });
+            const retryParsed = parseRewardsExtract(retryExtracted);
+            const retrySanitized = await buildRewardRuleDraftsFromExtract({
+              productName: cardNameForJob,
+              issuer: issuerForRestOfJob,
+              extract: retryParsed,
+            });
+            if (retryParsed.earnRates.length > 0) {
+              const retryHash = sha256Hex(stableSerialize(retryExtracted));
+              await prisma.$transaction(async (tx) => {
+                await tx.cardCatalogProduct.update({
+                  where: { slug: product.slug },
+                  data: {
+                    officialDocumentUrl: retryUrl,
+                    lastExtractHash: retryHash,
+                    lastExtractJson: retryExtracted as object,
+                    lastFetchedAt: new Date(),
+                  },
+                });
+                await applyExtractSnapshotToCatalog(
+                  tx,
+                  product.slug,
+                  retryExtracted,
+                  retrySanitized,
+                );
+              });
+              ruleCountAfter = await prisma.rewardRule.count({
+                where: { catalogProductSlug: params.productSlug },
+              });
+              jobStatus =
+                ruleCountAfter > 0 || retryParsed.earnRates.length > 0
+                  ? "COMPLETED"
+                  : "FAILED";
+              jobError =
+                jobStatus === "COMPLETED"
+                  ? null
+                  : "Rewards document found but no earn rates could be mapped — try Retry rewards lookup.";
+            }
+          }
+        }
+      } catch {
+        /* keep original failure */
+      }
+    }
 
     await prisma.cardIntelJob.update({
       where: { id: job.id },
       data: {
-        status: ruleCountAfter > 0 || parsed.earnRates.length > 0 ? "COMPLETED" : "FAILED",
+        status: jobStatus,
         finishedAt: new Date(),
-        errorMessage:
-          ruleCountAfter > 0 || parsed.earnRates.length > 0
-            ? null
-            : "Rewards document found but no earn rates could be mapped — try Retry rewards lookup.",
+        errorMessage: jobError,
       },
     });
   } catch (e) {

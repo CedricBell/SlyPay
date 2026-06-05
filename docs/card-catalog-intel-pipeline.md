@@ -63,8 +63,10 @@ Fichier : `frontend/src/server/card-intelligence/run-intel-job.ts`.
 1. Création `CardIntelJob` (`PENDING` → `RUNNING`).
 2. Chargement `CardCatalogProduct` par `productSlug`.
 3. **URL du PDF** : `CARD_INTEL_OVERRIDE_SLUG` + `CARD_INTEL_OVERRIDE_PDF_URL` (dev / secours) sinon `officialDocumentUrl`. Si vide, **découverte** via `discoverOfficialPdfUrl` (`discover-official-pdf-url.ts` + `pdf-discovery-query.ts`) : requête avec **phrase exacte** (nom catalogue entre guillemets), **termes `-exclus`** dérivés des slugs « sœurs » même émetteur (ex. `discover-it` exclut `miles` venant de `discover-it-miles`), puis **choix du meilleur** candidat parmi les résultats (score URL + titre/snippet, pas seulement le premier lien) :
-   - **Brave Search** si `BRAVE_SEARCH_API_KEY` (ou `BRAVE_API_KEY`) — [tableau de bord Brave](https://api-dashboard.search.brave.com/) ;
-   - sinon **Google Custom Search** si `GOOGLE_API_KEY` + `GOOGLE_CSE_ID`.
+   - **Étape 1 — recherche « comme Google »** : `BRAVE_SEARCH_API_KEY` suffit (Brave = web ouvert ; pas besoin de Google CSE — l’option « Rechercher sur l’ensemble du Web » est souvent grisée pour les nouveaux moteurs Programmable Search).
+   - Requête minimale : `"PayPal Cashback Mastercard" credit card` → on prend les **4 premiers liens** (hors blogs type NerdWallet) et on garde le premier dont le **texte** parle vraiment de rewards.
+   - Ensuite crawl issuer + `site:…` + requêtes enrichies ; **open-web activé par défaut** (`INTEL_ALLOW_OPEN_WEB=0` pour couper).
+   - Google CSE (`GOOGLE_API_KEY` + `GOOGLE_CSE_ID`) reste **optionnel** si tu configures des sites précis (ex. `paypal.com`, `chase.com`) — pas pour remplacer le web entier.
 4. Si aucun PDF : statut **`SKIPPED_NO_SOURCE`** avec message d’aide (domaines émetteur, clés API, etc.).
 5. **Téléchargement** HTTPS (`fetch-document.ts`), **extraction texte** PDF (`pdf-text.ts` — charge `pdf-parse/lib/pdf-parse.js` pour éviter le bug `05-versions-space.pdf`).
 6. **LLM 1** — `extract-rewards.ts` : JSON structuré (`rewardsExtractSchema`).
@@ -84,16 +86,6 @@ Fichier central : `frontend/src/server/card-intelligence/card-intel-llm.ts`.
 - **`CARD_INTEL_MAX_DOC_CHARS`** : tronque le texte envoyé au LLM (défaut 120000) pour limiter coût et timeouts.
 
 Variables résumées aussi dans `.env.example` à la racine du repo.
-
-### 3.4 Score « wallet » (heuristique multi-signaux)
-
-Le tri / affichage des cartes utilise un **score additif** (pas un embedding) calculé dans `frontend/src/lib/wallet-score.ts` et exposé via `map-credit-card.ts` :
-
-1. **Crédits / avantages PDF** (`statementCredits` dans `lastExtractJson`) : bonus par ligne + contribution liée aux **montants en `$`** parsés dans le texte (ex. crédit Uber 200 $ augmente le score).
-2. **Structure d’earn PDF** (`earnRates`) : bonus selon **multiplicateurs / %** détectés dans le texte, avec un léger poids si le libellé évoque groceries, dining, travel, etc.
-3. **Règles persistées** (`RewardRule` sur la carte) : somme pondérée par **catégorie** (grocery / dining / travel comptent plus que `OTHER`) et léger bonus pour le cashback %.
-
-Le total et les trois composantes sont renvoyés dans l’API (`walletScore`, `walletPreview.scoreBreakdown`).
 
 ---
 
@@ -154,8 +146,7 @@ Toutes ces options supposent **d’intégrer un nouveau client SDK ou REST** dan
 
 | Fichier | Rôle |
 |---------|------|
-| `frontend/src/lib/wallet-score.ts` | Heuristique du score wallet (PDF + règles). |
-| `frontend/src/lib/map-credit-card.ts` | JSON carte + `walletScore` / `walletPreview`. |
+| `frontend/src/lib/map-credit-card.ts` | JSON carte + `walletPreview` (règles, crédits, protections). |
 | `frontend/src/app/api/v1/admin/credit-cards/route.ts` | Liste admin toutes les cartes. |
 | `frontend/src/app/admin/credit-cards/page.tsx` | Tableau admin cartes. |
 | `frontend/src/app/api/v1/cards/route.ts` | POST carte + `after(runCardIntelJob)`. |

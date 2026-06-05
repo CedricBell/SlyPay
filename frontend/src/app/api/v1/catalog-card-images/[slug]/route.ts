@@ -29,7 +29,8 @@ export async function GET(_req: Request, ctx: Params) {
     headers: {
       "Content-Type": blob.mimeType || "image/png",
       "Content-Length": String(blob.byteSize),
-      "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+      "Cache-Control": "public, max-age=3600, stale-while-revalidate=86400",
+      ETag: `"${blob.fetchedAt.getTime()}-${blob.byteSize}"`,
       "Content-Disposition": `inline; filename="${slug.replace(/[^\w.\-]+/g, "_")}.png"`,
     },
   });

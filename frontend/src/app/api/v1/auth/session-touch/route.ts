@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createClient } from "@/lib/supabase/server";
+import { NextRequest, NextResponse } from "next/server";
+import { createClientFromRequest } from "@/lib/supabase/route-handler";
 import {
   evaluateSessionExpiry,
   SESSION_COOKIE_LAST_ACTIVE,
@@ -9,22 +8,29 @@ import {
   touchSessionActivityCookie,
 } from "@/lib/session-timeout";
 
-export async function POST() {
-  const supabase = await createClient();
+export async function POST(request: NextRequest) {
+  let response = NextResponse.json({ ok: true });
+  const supabase = createClientFromRequest(request, response);
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      {
+        message:
+          "The server could not read your sign-in session. Refresh the page and try again.",
+        code: "no_server_session",
+      },
+      { status: 401 },
+    );
   }
 
-  const cookieStore = await cookies();
-  const started = cookieStore.get(SESSION_COOKIE_STARTED)?.value;
-  const lastActive = cookieStore.get(SESSION_COOKIE_LAST_ACTIVE)?.value;
+  const started = request.cookies.get(SESSION_COOKIE_STARTED)?.value;
+  const lastActive = request.cookies.get(SESSION_COOKIE_LAST_ACTIVE)?.value;
 
   if (!started || !lastActive) {
-    const response = NextResponse.json({ ok: true });
     stampFreshSessionCookies(response);
     return response;
   }
@@ -32,14 +38,10 @@ export async function POST() {
   const { expired, reason } = evaluateSessionExpiry(started, lastActive);
 
   if (expired) {
-    await supabase.auth.signOut();
-    return NextResponse.json(
-      { message: "Session expired", reason: reason ?? "max_age" },
-      { status: 401 },
-    );
+    stampFreshSessionCookies(response);
+    return response;
   }
 
-  const response = NextResponse.json({ ok: true });
   touchSessionActivityCookie(response);
   return response;
 }

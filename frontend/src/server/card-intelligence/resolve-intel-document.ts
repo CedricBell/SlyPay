@@ -2,20 +2,33 @@ import { discoverIntelViaCardProductPage } from "@/server/card-intelligence/issu
 import type { IntelDocumentKind } from "@/server/card-intelligence/discover-official-pdf-url";
 import { classifyIntelDocumentIntent } from "@/server/card-intelligence/intel-document-intent";
 import {
+  pickFirstReachableIntelUrl,
+  probeIntelDocumentUrl,
+} from "@/server/card-intelligence/intel-document-probe";
+import {
   isAncillaryIssuerFeaturePath,
   isIssuerLegalHubListingPath,
 } from "@/server/card-intelligence/intel-path-bonus";
-import { guessIssuerProductPageUrls } from "@/server/card-intelligence/issuer-product-url-guess";
+import {
+  amexMarketingUrlCandidates,
+  guessIssuerProductPageUrls,
+} from "@/server/card-intelligence/issuer-product-url-guess";
+import { resolveIntelDiscoveryHosts } from "@/server/card-intelligence/co-brand-discovery";
+import { siblingSlugExclusionTerms } from "@/server/card-intelligence/pdf-discovery-query";
+import {
+  isGenericIssuerCardHub,
+  scoreIntelProductPageUrl,
+} from "@/server/card-intelligence/intel-source-url-quality";
 
 function isUnacceptableIntelDocumentUrl(url: string): boolean {
   return (
-    isAncillaryIssuerFeaturePath(url) || isIssuerLegalHubListingPath(url)
+    isAncillaryIssuerFeaturePath(url) ||
+    isIssuerLegalHubListingPath(url) ||
+    isGenericIssuerCardHub(url)
   );
 }
-import { siblingSlugExclusionTerms } from "@/server/card-intelligence/pdf-discovery-query";
-import { resolveIssuerOfficialHostsWithDb } from "@/server/card-intelligence/issuer-official-hosts";
 
-/** Marketing landing pages are not sufficient — crawl for offer / terms HTML. */
+/** Marketing landing pages — use as intel source (offer overlay / page copy). */
 export function isIssuerProductLandingUrl(url: string): boolean {
   try {
     const u = new URL(url);
@@ -35,6 +48,25 @@ export function isIssuerProductLandingUrl(url: string): boolean {
         ) && !/pricing|terms|rules/i.test(path)
       );
     }
+    if (/capitalone\.com/i.test(u.hostname)) {
+      return /\/credit-cards\/[^/]+\/?$/i.test(path) && !/\/apply\b/i.test(path);
+    }
+    if (/apple\.com/i.test(u.hostname)) {
+      return /\/apple-card/i.test(path);
+    }
+    if (/usbank\.com/i.test(u.hostname)) {
+      return /\/credit-cards?\//i.test(path);
+    }
+    if (/amazon\.com/i.test(u.hostname)) {
+      return (
+        /\/dp\/[a-z0-9]{8,}/i.test(path) ||
+        /\/gp\/product\//i.test(path) ||
+        /Synchrony-Bank-/i.test(path)
+      );
+    }
+    if (/paypal\.com/i.test(u.hostname)) {
+      return /\/digital-wallet\/manage-money\//i.test(path);
+    }
     return false;
   } catch {
     return false;
@@ -42,8 +74,8 @@ export function isIssuerProductLandingUrl(url: string): boolean {
 }
 
 /**
- * When the catalog stores a product marketing URL, discover the rewards/terms document
- * by crawling that product page (Amex offer overlay, Chase offer details, etc.).
+ * Normalize discovered URL: keep reachable marketing pages (Amex/Chase/Capital One).
+ * Never append `/apply/terms/` without a successful probe — that path often 404s.
  */
 export async function refineIntelDocumentUrl(args: {
   url: string | null;
@@ -53,48 +85,70 @@ export async function refineIntelDocumentUrl(args: {
 }): Promise<{ url: string | null; sourceKind: IntelDocumentKind | null }> {
   if (!args.url) return { url: null, sourceKind: null };
 
-  const intent = classifyIntelDocumentIntent(args.url);
-  const needsRefine =
-    isIssuerProductLandingUrl(args.url) ||
-    isAncillaryIssuerFeaturePath(args.url) ||
-    (intent === "neutral" && !args.url.toLowerCase().includes("pricingandterms"));
-
-  if (!needsRefine) {
-    return { url: args.url, sourceKind: null };
+  const probe = await probeIntelDocumentUrl(args.url);
+  if (!probe.reachable) {
+    const fallbacks = [
+      ...guessIssuerProductPageUrls(args.issuer, args.productSlug, args.cardName),
+      ...amexMarketingUrlCandidates(args.productSlug, args.cardName),
+    ];
+    const picked = await pickFirstReachableIntelUrl(fallbacks);
+    if (picked) {
+      return { url: picked.url, sourceKind: picked.kind };
+    }
+    return { url: null, sourceKind: null };
   }
 
-  const hosts = await resolveIssuerOfficialHostsWithDb(args.issuer);
-  const exclusionTerms = siblingSlugExclusionTerms(
+  if (isIssuerProductLandingUrl(args.url)) {
+    return { url: args.url, sourceKind: "html" };
+  }
+
+  if (
+    scoreIntelProductPageUrl(args.url, args.productSlug, args.cardName) >= 70
+  ) {
+    return { url: args.url, sourceKind: probe.kind };
+  }
+
+  const intent = classifyIntelDocumentIntent(args.url);
+  const needsRefine =
+    isAncillaryIssuerFeaturePath(args.url) ||
+    (intent === "neutral" &&
+      !args.url.toLowerCase().includes("pricingandterms"));
+
+  if (!needsRefine) {
+    return { url: args.url, sourceKind: probe.kind };
+  }
+
+  const discovery = await resolveIntelDiscoveryHosts(
     args.issuer,
+    args.cardName,
+    args.productSlug,
+  );
+  const exclusionTerms = siblingSlugExclusionTerms(
+    discovery.issuerForDiscovery,
     args.productSlug,
   );
   const discovered = await discoverIntelViaCardProductPage({
-    hosts,
-    cardName: args.cardName,
-    issuer: args.issuer,
+    hosts: discovery.hosts,
+    cardName: discovery.cardNameForDiscovery,
+    issuer: discovery.issuerForDiscovery,
     productSlug: args.productSlug,
     exclusionTerms,
+    coBrand: discovery.coBrand,
   });
 
   if (discovered?.url && !isUnacceptableIntelDocumentUrl(discovered.url)) {
-    return { url: discovered.url, sourceKind: discovered.sourceKind };
-  }
-
-  if (/americanexpress\.com/i.test(args.url)) {
-    const termsUrl = `${args.url.replace(/\/$/, "")}/apply/terms/`;
-    return { url: termsUrl, sourceKind: "html" };
-  }
-
-  for (const productUrl of guessIssuerProductPageUrls(
-    args.issuer,
-    args.productSlug,
-    args.cardName,
-  )) {
-    if (/americanexpress\.com/i.test(productUrl)) {
-      const termsUrl = `${productUrl.replace(/\/$/, "")}/apply/terms/`;
-      return { url: termsUrl, sourceKind: "html" };
+    const dProbe = await probeIntelDocumentUrl(discovered.url);
+    if (dProbe.reachable) {
+      return { url: discovered.url, sourceKind: discovered.sourceKind };
     }
   }
 
-  return { url: args.url, sourceKind: null };
+  const reachable = await pickFirstReachableIntelUrl(
+    guessIssuerProductPageUrls(args.issuer, args.productSlug, args.cardName),
+  );
+  if (reachable) {
+    return { url: reachable.url, sourceKind: reachable.kind };
+  }
+
+  return { url: args.url, sourceKind: probe.kind };
 }

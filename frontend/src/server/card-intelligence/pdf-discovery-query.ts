@@ -1,5 +1,6 @@
 import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 import { isAncillaryIssuerFeaturePath } from "@/server/card-intelligence/intel-path-bonus";
+import { scoreIntelProductPageUrl } from "@/server/card-intelligence/intel-source-url-quality";
 
 const PRODUCT_STOPWORDS = new Set([
   "card",
@@ -34,13 +35,15 @@ export function coreCardQueryPhrase(cardName: string): string | null {
   return null;
 }
 
-/** Tier / variant tokens in PDF titles — penalized when missing from the user's card name. */
-const VARIANT_TIER_TOKENS = [
+/** Tier / variant tokens — penalized in URLs when absent from the target card name. */
+export const VARIANT_TIER_TOKENS = [
   "surpass",
   "aspire",
   "behold",
   "strata",
   "reserve",
+  "preferred",
+  "everyday",
   "infinite",
   "signature",
   "premier",
@@ -49,6 +52,32 @@ const VARIANT_TIER_TOKENS = [
   "secured",
   "student",
   "optimum",
+  "miles",
+  "flex",
+  "unlimited",
+  "savorone",
+  "quicksilver",
+  "venturex",
+  "venture",
+  "savor",
+  "gold",
+  "platinum",
+  "green",
+  "silver",
+  "custom",
+  "double",
+  "prime",
+  "amazon",
+  "autograph",
+  "active",
+  "bonvoy",
+  "hilton",
+  "marriott",
+  "delta",
+  "business",
+  "corporate",
+  "world",
+  "elite",
 ];
 
 function issuerWordProtections(issuer: string | undefined): Set<string> {
@@ -63,7 +92,8 @@ function issuerWordProtections(issuer: string | undefined): Set<string> {
   );
 }
 
-function variantTokensAbsentFromCardName(
+/** Variant words that appear in a URL/title but not on this card (e.g. "preferred" for Reserve). */
+export function variantTokensAbsentFromCardName(
   cardName: string,
   issuer?: string,
 ): string[] {
@@ -96,6 +126,49 @@ export function siblingSlugExclusionTerms(
     }
   }
   return [...terms];
+}
+
+/**
+ * Same issuer, shared slug prefix (≥2 segments), different suffix — e.g.
+ * `chase-sapphire-preferred` vs `chase-sapphire-reserve` → penalize sibling tokens.
+ */
+export function cousinSlugExclusionTerms(
+  issuer: string,
+  currentSlug: string,
+): string[] {
+  const currentParts = currentSlug.split("-").filter(Boolean);
+  const terms = new Set<string>();
+  for (const e of CARD_CATALOG_ENTRIES) {
+    if (e.issuer !== issuer || e.id === currentSlug) continue;
+    const otherParts = e.id.split("-").filter(Boolean);
+    let commonLen = 0;
+    while (
+      commonLen < currentParts.length &&
+      commonLen < otherParts.length &&
+      currentParts[commonLen] === otherParts[commonLen]
+    ) {
+      commonLen++;
+    }
+    if (commonLen < 2) continue;
+    for (let i = commonLen; i < otherParts.length; i++) {
+      const part = otherParts[i].toLowerCase();
+      if (part.length >= 3) terms.add(part);
+    }
+  }
+  return [...terms];
+}
+
+/** Exclusion tokens for image search / ranking (sibling + cousin catalog variants). */
+export function buildCatalogImageExclusionTerms(
+  issuer: string,
+  productSlug: string,
+): string[] {
+  return [
+    ...new Set([
+      ...siblingSlugExclusionTerms(issuer, productSlug),
+      ...cousinSlugExclusionTerms(issuer, productSlug),
+    ]),
+  ];
 }
 
 /**
@@ -168,13 +241,78 @@ export function isPlaceholderIssuerForOpenSearch(issuer: string): boolean {
  * Web search without `site:` — used when the issuer is not mapped to official
  * domains. Document-oriented keywords; pairing issuer+name when meaningful.
  */
+function slugToSearchPhrase(productSlug: string): string {
+  return productSlug
+    .split("-")
+    .filter((t) => t.length > 1 && !PRODUCT_STOPWORDS.has(t))
+    .join(" ");
+}
+
+/** Same as a human typing the card name in Google (no legal jargon). */
+export function buildMinimalHumanSearchQuery(args: {
+  cardName: string;
+  productSlug: string;
+  issuer?: string;
+}): string {
+  const name = args.cardName.replace(/"/g, " ").trim();
+  const issuer = args.issuer?.trim() ?? "";
+  const issuerWord = issuer.toLowerCase().split(/\s+/)[0] ?? "";
+  const nameHasIssuer =
+    issuerWord.length >= 3 &&
+    name.toLowerCase().includes(issuerWord);
+  const label =
+    issuer && !isPlaceholderIssuerForOpenSearch(issuer) && !nameHasIssuer
+      ? `${issuer} ${name}`
+      : name;
+  if (label.length >= 3) {
+    return `"${label}" credit card`;
+  }
+  const slugPhrase = slugToSearchPhrase(args.productSlug);
+  return slugPhrase.length >= 3 ? `${slugPhrase} credit card` : "";
+}
+
+/**
+ * Slightly richer fallback query (still short — not a boolean legal soup).
+ */
+export function buildSlugFirstSearchQuery(args: {
+  productSlug: string;
+  cardName: string;
+  issuer: string;
+  exclusionTerms: string[];
+}): string {
+  const slugPhrase = slugToSearchPhrase(args.productSlug);
+  const nameCore = coreCardQueryPhrase(args.cardName);
+  const primary =
+    slugPhrase.length >= 4
+      ? slugPhrase
+      : (nameCore ?? args.cardName.trim()).slice(0, 80);
+  const neg = args.exclusionTerms
+    .filter((t) => t.length >= 3)
+    .map((t) => `-${t}`)
+    .join(" ");
+  return [
+    `"${primary}"`,
+    "credit card",
+    "-reddit -nerdwallet -thepointsguy -doctorofcredit -wikipedia",
+    neg,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function buildOpenWebSearchQuery(args: {
   issuer: string;
   cardName: string;
   exclusionTerms: string[];
+  productSlug?: string;
 }): string {
   const useIssuer = !isPlaceholderIssuerForOpenSearch(args.issuer);
   const nameCore = coreCardQueryPhrase(args.cardName) ?? args.cardName.trim();
+  const slugPhrase = args.productSlug
+    ? slugToSearchPhrase(args.productSlug)
+    : "";
   const combined = (
     useIssuer ? `${args.issuer} ${nameCore}` : nameCore
   )
@@ -186,7 +324,13 @@ export function buildOpenWebSearchQuery(args: {
     .filter((t) => t.length >= 3)
     .map((t) => `-${t}`)
     .join(" ");
-  return [phrase, INTEL_DOC_HUMAN_INTENT, neg]
+  return [
+    phrase,
+    slugPhrase.length >= 4 ? slugPhrase : "",
+    '"credit card"',
+    INTEL_DOC_HUMAN_INTENT,
+    neg,
+  ]
     .filter(Boolean)
     .join(" ")
     .replace(/\s+/g, " ")
@@ -260,7 +404,17 @@ export function scorePdfCandidate(args: {
     if (re.test(blob)) s -= 85;
   }
 
-  s += Math.max(0, 40 - args.resultIndex);
+  if (args.resultIndex === 0) {
+    s += 95;
+  } else if (args.resultIndex === 1) {
+    s += 55;
+  } else if (args.resultIndex === 2) {
+    s += 30;
+  } else {
+    s += Math.max(0, 20 - args.resultIndex);
+  }
+
+  s += scoreIntelProductPageUrl(args.url, args.productSlug, args.cardName);
 
   try {
     const u = new URL(args.url);
@@ -279,3 +433,4 @@ export function scorePdfCandidate(args: {
 
   return s;
 }
+

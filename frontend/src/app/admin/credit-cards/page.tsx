@@ -58,6 +58,10 @@ export default function AdminCreditCardsPage() {
   const [data, setData] = useState<ListRes | null>(null);
   const [page, setPage] = useState(1);
   const [err, setErr] = useState<string | null>(null);
+  const [refreshingSlug, setRefreshingSlug] = useState<string | null>(null);
+  const [refreshingImageSlug, setRefreshingImageSlug] = useState<string | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     setErr(null);
@@ -75,6 +79,38 @@ export default function AdminCreditCardsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const refreshIntel = async (slug: string) => {
+    setRefreshingSlug(slug);
+    setErr(null);
+    try {
+      await apiFetch(`/admin/catalog/${encodeURIComponent(slug)}/refresh-intel`, {
+        method: "POST",
+      });
+      await load();
+    } catch (e) {
+      if (e instanceof ApiError) setErr(formatCaughtApiError(e));
+      else setErr("Échec du relancement intel");
+    } finally {
+      setRefreshingSlug(null);
+    }
+  };
+
+  const refreshImage = async (slug: string) => {
+    setRefreshingImageSlug(slug);
+    setErr(null);
+    try {
+      await apiFetch(`/admin/catalog/${encodeURIComponent(slug)}/refresh-image`, {
+        method: "POST",
+      });
+      await load();
+    } catch (e) {
+      if (e instanceof ApiError) setErr(formatCaughtApiError(e));
+      else setErr("Échec du téléchargement de l'image");
+    } finally {
+      setRefreshingImageSlug(null);
+    }
+  };
 
   if (!data && !err) {
     return <Skeleton className="h-8 w-56" />;
@@ -113,6 +149,7 @@ export default function AdminCreditCardsPage() {
               <th className="px-3 py-2 font-medium">Règles</th>
               <th className="px-3 py-2 font-medium">Job intel</th>
               <th className="px-3 py-2 font-medium">Màj</th>
+              <th className="px-3 py-2 font-medium">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -182,6 +219,34 @@ export default function AdminCreditCardsPage() {
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap text-[11px] text-muted-foreground">
                   {new Date(r.updatedAt).toLocaleString()}
+                </td>
+                <td className="px-3 py-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        refreshingSlug === r.slug ||
+                        refreshingImageSlug === r.slug
+                      }
+                      onClick={() => void refreshIntel(r.slug)}
+                    >
+                      {refreshingSlug === r.slug ? "…" : "Intel"}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        refreshingSlug === r.slug ||
+                        refreshingImageSlug === r.slug
+                      }
+                      onClick={() => void refreshImage(r.slug)}
+                    >
+                      {refreshingImageSlug === r.slug ? "…" : "Image"}
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}

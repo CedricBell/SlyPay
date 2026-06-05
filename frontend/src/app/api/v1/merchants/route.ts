@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getSessionAppUser } from "@/lib/session-user";
 import { prisma } from "@/lib/prisma";
 import { dec } from "@/lib/serialize";
+import { searchGooglePlacesText } from "@/server/google-places-client";
 
 function slugify(name: string) {
   return name
@@ -62,26 +63,62 @@ export async function GET(req: NextRequest) {
   if (!queryRaw && !queryCompact) {
     return NextResponse.json([]);
   }
+
+  const lat = Number(req.nextUrl.searchParams.get("lat"));
+  const lng = Number(req.nextUrl.searchParams.get("lng"));
+  const locationBias =
+    Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : undefined;
+
   const take = 25;
   const prefix = queryCompact.slice(0, 4);
-  const rows = await prisma.merchant.findMany({
-    where: {
-      OR: [
-        { normalized: { contains: queryRaw } },
-        { displayName: { contains: q.trim(), mode: "insensitive" } },
-        ...(prefix.length >= 3
-          ? [{ displayName: { contains: prefix, mode: "insensitive" as const } }]
-          : []),
-      ],
-    },
-    take,
-    orderBy: { displayName: "asc" },
-    include: { categoryMappings: true },
-  });
+  const [rows, googleHits] = await Promise.all([
+    prisma.merchant.findMany({
+      where: {
+        OR: [
+          { normalized: { contains: queryRaw } },
+          { displayName: { contains: q.trim(), mode: "insensitive" } },
+          ...(prefix.length >= 3
+            ? [{ displayName: { contains: prefix, mode: "insensitive" as const } }]
+            : []),
+        ],
+      },
+      take,
+      orderBy: { displayName: "asc" },
+      include: { categoryMappings: true },
+    }),
+    searchGooglePlacesText(q.trim(), locationBias),
+  ]);
+
   const filtered = rows.filter((r) =>
     merchantMatchesQuery(r, queryRaw, queryCompact),
   );
-  return NextResponse.json(filtered.map((r) => mapMerchant(r)));
+  const dbNames = new Set(
+    filtered.map((r) => normalizeSearch(r.displayName)),
+  );
+
+  const fromDb = filtered.map((r) => ({
+    ...mapMerchant(r),
+    source: "db" as const,
+  }));
+
+  const fromGoogle = googleHits
+    .filter((g) => {
+      const key = normalizeSearch(g.displayName);
+      return key && !dbNames.has(key);
+    })
+    .slice(0, 12)
+    .map((g) => ({
+      id: `gplace:${g.placeId}`,
+      slug: `gplace-${g.placeId.replace(/\//g, "-")}`,
+      displayName: g.displayName,
+      normalized: normalizeSearch(g.displayName),
+      mcc: null,
+      notes: g.formattedAddress ?? null,
+      categoryMappings: [] as ReturnType<typeof mapMerchant>["categoryMappings"],
+      source: "google" as const,
+    }));
+
+  return NextResponse.json([...fromDb, ...fromGoogle]);
 }
 
 export async function POST(req: NextRequest) {

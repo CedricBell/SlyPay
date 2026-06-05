@@ -116,7 +116,12 @@ export function useNearbyCheckout() {
     async (
       lat: number,
       lng: number,
-      opts?: { autoRecommend?: boolean; clearBanner?: boolean },
+      opts?: {
+        autoRecommend?: boolean;
+        clearBanner?: boolean;
+        /** When true (Search this area), do not auto-pick the top match. */
+        preserveSelection?: boolean;
+      },
     ) => {
       setGeoLoading(true);
       if (opts?.clearBanner !== false) setOneTapBanner(null);
@@ -134,27 +139,29 @@ export function useNearbyCheckout() {
           setGeoMsg("No places in this area.");
           return;
         }
-        const top = data.matches.filter((m) => m.merchant)[0] ?? data.matches[0];
-        applyMatch(top);
-        const tier = confidenceTier(top);
-        if (opts?.autoRecommend && tier === "high" && top.merchant) {
-          setOneTapBanner(
-            `Recommended now for ${top.merchant.displayName} — change store if needed.`,
-          );
-          await runRecommendation({
-            merchantName: top.merchant.displayName,
-            mcc: top.merchant.mcc,
-            clearBanner: false,
-            categoryHint: null,
-          });
-        } else if (opts?.autoRecommend && tier === "medium" && top.merchant) {
-          setOneTapBanner(
-            `We prefilled ${top.merchant.displayName}. Tap “Get recommendation” to confirm.`,
-          );
-        } else if (opts?.autoRecommend) {
-          setOneTapBanner(
-            "Pick the right place on the map or list, or type the store name.",
-          );
+        if (!opts?.preserveSelection) {
+          const top = data.matches.filter((m) => m.merchant)[0] ?? data.matches[0];
+          applyMatch(top);
+          const tier = confidenceTier(top);
+          if (opts?.autoRecommend && tier === "high" && top.merchant) {
+            setOneTapBanner(
+              `Recommended now for ${top.merchant.displayName} — change store if needed.`,
+            );
+            await runRecommendation({
+              merchantName: top.merchant.displayName,
+              mcc: top.merchant.mcc,
+              clearBanner: false,
+              categoryHint: null,
+            });
+          } else if (opts?.autoRecommend && tier === "medium" && top.merchant) {
+            setOneTapBanner(
+              `We prefilled ${top.merchant.displayName}. Tap “Get recommendation” to confirm.`,
+            );
+          } else if (opts?.autoRecommend) {
+            setOneTapBanner(
+              "Pick the right place on the map or list, or type the store name.",
+            );
+          }
         }
       } catch {
         setGeoMsg("Could not load nearby places.");
@@ -168,7 +175,11 @@ export function useNearbyCheckout() {
   const searchThisArea = useCallback(
     async (lat: number, lng: number) => {
       setGeoMsg(null);
-      await searchNearbyAt(lat, lng, { autoRecommend: false, clearBanner: true });
+      await searchNearbyAt(lat, lng, {
+        autoRecommend: false,
+        clearBanner: true,
+        preserveSelection: true,
+      });
     },
     [searchNearbyAt],
   );

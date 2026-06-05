@@ -14,7 +14,14 @@
     "db:seed": "prisma db seed",
     "db:diff": "prisma migrate diff --from-url \"$DATABASE_URL\" --to-schema-datamodel prisma/schema.prisma --script",
     "db:reset-intel": "prisma db execute --file prisma/reset-card-pipeline-data.sql --schema prisma/schema.prisma && npx tsx scripts/sync-catalog.ts",
-    "db:reset-cards": "prisma db execute --file prisma/reset-card-pipeline-full.sql --schema prisma/schema.prisma && npx tsx scripts/sync-catalog.ts"
+    "db:reset-cards": "prisma db execute --file prisma/reset-card-pipeline-full.sql --schema prisma/schema.prisma && npx tsx scripts/sync-catalog.ts",
+    "intel:run-all": "npx tsx scripts/run-all-catalog-intel.ts",
+    "intel:run-all:force": "npx tsx scripts/run-all-catalog-intel.ts --force",
+    "catalog:hydrate-images": "npx tsx scripts/hydrate-all-catalog-images.ts",
+    "catalog:hydrate-images:force": "npx tsx scripts/hydrate-all-catalog-images.ts --force",
+    "catalog:images:run-all": "npx tsx scripts/run-all-catalog-images.ts",
+    "catalog:images:run-all:force": "npx tsx scripts/run-all-catalog-images.ts --force",
+    "db:reset-all-cards": "npx tsx scripts/reset-all-card-data.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

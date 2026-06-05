@@ -6,6 +6,7 @@ import { getSessionAppUser } from "@/lib/session-user";
 import { dec } from "@/lib/serialize";
 import {
   buildCardSpendBenefits,
+  filterRotatingQuartersForCategory,
   REFERENCE_PURCHASE_USD,
 } from "@/lib/recommendation-benefits";
 import { resolveSpendCategory } from "@/server/category-resolver";
@@ -13,6 +14,11 @@ import { decideBestCard } from "@/server/decision-engine";
 import type { EngineCard } from "@/server/decision-engine.types";
 import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 import { rewardRulesForWalletCard } from "@/lib/credit-card-rules";
+import { catalogImageSrcForDisplay } from "@/lib/catalog-image-display";
+import {
+  resolveCatalogImageUrl,
+  resolveCatalogImageUrlByIssuerAndName,
+} from "@/server/catalog-card-art";
 import {
   mergeEngineOffers,
   rotatingCalendarToEngineOffers,
@@ -24,6 +30,24 @@ const bodySchema = z.object({
   categoryHint: z.nativeEnum(SpendCategory).optional(),
   persist: z.boolean().optional(),
 });
+
+function catalogImageForWalletCard(
+  card: {
+    name: string;
+    issuer: string;
+    catalogProductSlug: string | null;
+    catalogProduct?: { slug: string; imageUrl: string | null } | null;
+  },
+): string | null {
+  const raw =
+    resolveCatalogImageUrl(
+      card.catalogProduct?.slug ?? card.catalogProductSlug ?? "",
+      { imageUrl: card.catalogProduct?.imageUrl ?? null },
+    ) ??
+    resolveCatalogImageUrlByIssuerAndName(card.issuer, card.name) ??
+    null;
+  return catalogImageSrcForDisplay(raw);
+}
 
 function catalogExtractForCard(
   card: {
@@ -69,6 +93,7 @@ export async function POST(req: NextRequest) {
       catalogProduct: {
         select: {
           slug: true,
+          imageUrl: true,
           rotatingBonusCalendar: true,
           rewardRules: true,
           lastExtractJson: true,
@@ -175,9 +200,14 @@ export async function POST(req: NextRequest) {
       rateLabel: benefits.rateLabel,
       last4: card?.last4 ?? null,
       colorHex: card?.colorHex ?? null,
+      catalogImageUrl: card ? catalogImageForWalletCard(card) : null,
       benefits,
       explanationLines: r.explanationLines,
-      catalogRotatingQuarters: Array.isArray(calJson) ? calJson : null,
+      catalogRotatingQuarters: filterRotatingQuartersForCategory(
+        calJson,
+        resolution.category,
+        now,
+      ),
     };
   });
 
@@ -275,21 +305,11 @@ export async function POST(req: NextRequest) {
           issuer: bestWallet.issuer,
           last4: bestWallet.last4,
           colorHex: bestWallet.colorHex,
+          catalogImageUrl: catalogImageForWalletCard(bestWallet),
         }
       : null,
     bestCardBenefits,
-    reasoning: [
-      ...(engineResult.winner?.explanationLines ?? []),
-      ...(bestCardBenefits?.statementCredits.map(
-        (c) =>
-          `Statement credit: ${c.description}${c.amountText ? ` (${c.amountText})` : ""}${c.cadence ? ` — ${c.cadence}` : ""}`,
-      ) ?? []),
-      ...(bestCardBenefits?.protections.map(
-        (p) => `Protection: ${p.title} — ${p.coverageSummary}`,
-      ) ?? []),
-      ...(bestCardBenefits?.loyaltyPerks.map((p) => `Loyalty perk: ${p}`) ?? []),
-      ...(bestCardBenefits?.merchantExclusionNotes ?? []),
-    ],
+    reasoning: engineResult.winner?.explanationLines ?? [],
     alternatesTied: engineResult.alternatesTied,
     ranked,
     marketBest: marketWinner

@@ -62,7 +62,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ message: "Invalid coordinates" }, { status: 400 });
   }
 
-  const { places, sources } = await loadNearbyPlaces(lat, lng);
+  const { places, sources, googleConfigured, googleError } =
+    await loadNearbyPlaces(lat, lng);
   if (places.length === 0) {
     return NextResponse.json({
       userLat: lat,
@@ -70,6 +71,8 @@ export async function GET(req: NextRequest) {
       nearby: [],
       matches: [],
       sources,
+      googleConfigured,
+      ...(googleError ? { googleError } : {}),
     });
   }
 
@@ -159,5 +162,7 @@ export async function GET(req: NextRequest) {
     nearby,
     matches,
     sources,
+    googleConfigured,
+    ...(googleError ? { googleError } : {}),
   });
 }

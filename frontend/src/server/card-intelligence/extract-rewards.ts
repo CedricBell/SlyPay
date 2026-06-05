@@ -9,14 +9,14 @@ The primary source is usually an official issuer PDF or HTML terms/benefits page
 The same payload may end with a clearly delimited block from third-party editorial sites — treat that block as non-authoritative.
 
 Rules:
-- Base every field on the supplied documentText. If something is not stated, say so in caveats and use empty arrays.
-- Do not invent issuer URLs, enrollment steps, or dollar amounts unsupported by the text.
-- summary: 2–5 factual sentences on earn + headline perks.
-- benefitsSummary: 2–4 sentences on purchase/travel protections, insurance, lounge/status, and non-earn perks (e.g. phone protection, rental car coverage).
-- earnRates: each earning structure with categoryHint mirroring document wording. Put merchant exclusions (Target, Walmart, Costco, etc.) in excludedMerchants[] for that rate — NOT only in caveats.
-- statementCredits: EVERY recurring credit with a SPECIFIC description naming the benefit (e.g. "$200 airline fee credit", "Uber Cash", "Digital Entertainment credit", "Saks Fifth Avenue credit", "Hotel credit on prepaid Fine Hotels + Resorts") — NEVER use only "Statement credit". Include amountText ($, points value), cadence (monthly, annual, semi-annual), merchantHint (Uber, Saks, Hilton, airline, Lululemon, Equinox, etc.), categoryHint when relevant.
-- protections: purchase/travel/phone/extended warranty/return/fraud/rental car coverage with coverageSummary and limitsText when stated.
-- perks: lounge access, status, Global Entry/TSA PreCheck, concierge, etc.
+- Base every field on the supplied documentText only. If something is not stated, use empty arrays and note in caveats — never guess.
+- Do not invent amounts, partners, or benefits (e.g. do not write "Resy $400 quarterly" or "Walmart $155 monthly" unless that exact program appears verbatim in documentText).
+- summary: leave empty string "" (we do not want paraphrased marketing summaries).
+- benefitsSummary: leave empty string "" OR paste one short verbatim quote (max 240 chars) from the document with quotation marks — no paraphrase.
+- earnRates: each earning structure; categoryHint must quote document wording. Put merchant exclusions in excludedMerchants[] for that rate.
+- statementCredits: EVERY recurring credit with a SPECIFIC description from the document — NEVER use only "Statement credit". Include amountText, cadence, merchantHint, categoryHint when stated.
+- protections: extract ALL purchase/travel/phone/extended warranty/return protection/fraud/rental car/trip delay/baggage/accident coverages mentioned — one row per program. coverageSummary must quote or closely paraphrase only what the document states.
+- perks: lounge, status, Global Entry, etc. — only if stated.
 - welcomeOffer: signup bonus if stated.
 - annualFee / foreignTransactionFee when explicitly stated.
 - globalExcludedMerchants: merchants excluded from multiple categories if stated globally.

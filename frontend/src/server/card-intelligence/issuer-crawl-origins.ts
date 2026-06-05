@@ -24,6 +24,9 @@ const EXTRA_ORIGINS_BY_ISSUER = new Map<string, string[]>([
   ["wells fargo", ["https://www.wellsfargo.com", "https://creditcards.wellsfargo.com"]],
   ["bank of america", ["https://www.bankofamerica.com"]],
   ["bofa", ["https://www.bankofamerica.com"]],
+  ["us bank", ["https://www.usbank.com"]],
+  ["u s bank", ["https://www.usbank.com"]],
+  ["goldman sachs", ["https://www.goldmansachs.com", "https://www.apple.com"]],
 ]);
 
 /**

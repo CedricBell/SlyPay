@@ -26,6 +26,20 @@ export function classifyIntelDocumentIntent(
   if (isOffer && !(/pricing\s*(and|&)\s*terms?|pricingandterms/i.test(blob) && !/\boffer\b/i.test(blob))) {
     return "offer_rewards";
   }
+  if (
+    /\/credit[-_]?cards?\b/i.test(blob) &&
+    /(benefit|reward|earn|cash\s*back|exclusive\s+offer|save\s+\d+%)/i.test(blob) &&
+    !/cardmember-agreement|company\/legal/i.test(blob)
+  ) {
+    return "offer_rewards";
+  }
+  if (
+    /paypal\.com/i.test(blob) &&
+    /digital-wallet|manage-money/i.test(blob) &&
+    /(cash\s*back|mastercard|rewards?\s+program)/i.test(blob)
+  ) {
+    return "offer_rewards";
+  }
   if (isPricing) return "pricing_legal";
 
   if (/\/travel\b|\/home\/travel|travel-offers|amextravel\.com/i.test(blob)) {

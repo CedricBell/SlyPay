@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { readAuthApiError } from "@/lib/api";
 import { sessionExpiryMessage } from "@/lib/session-timeout";
 
 /** Pages accessibles sans session — no session polling / forced logout. */
@@ -52,9 +53,15 @@ export function SessionTimeoutGuard() {
         credentials: "include",
       });
       if (res.status === 401) {
-        const body = (await res.json().catch(() => ({}))) as { reason?: string };
-        if (body.reason === "idle" || body.reason === "max_age" || body.reason === "missing") {
+        const body = await readAuthApiError(res);
+        if (
+          body.reason === "idle" ||
+          body.reason === "max_age" ||
+          body.reason === "missing"
+        ) {
           await forceLogout(body.reason);
+        } else {
+          toast.error(body.message);
         }
       }
     } catch {
@@ -69,9 +76,15 @@ export function SessionTimeoutGuard() {
         credentials: "include",
       });
       if (res.status === 401) {
-        const body = (await res.json().catch(() => ({}))) as { reason?: string };
-        if (body.reason === "idle" || body.reason === "max_age" || body.reason === "missing") {
+        const body = await readAuthApiError(res);
+        if (
+          body.reason === "idle" ||
+          body.reason === "max_age" ||
+          body.reason === "missing"
+        ) {
           await forceLogout(body.reason);
+        } else {
+          toast.error(body.message);
         }
       }
     } catch {

@@ -126,7 +126,7 @@ function summarizeExtract(
   const protectionLabels: string[] = [];
   const prot = o.protections;
   if (Array.isArray(prot)) {
-    for (const item of prot.slice(0, 4)) {
+    for (const item of prot.slice(0, 24)) {
       if (item && typeof item === "object" && "title" in item) {
         const t = (item as { title?: string; coverageSummary?: string }).title;
         const c = (item as { coverageSummary?: string }).coverageSummary;
@@ -137,11 +137,11 @@ function summarizeExtract(
     }
   }
   return {
-    summaryLine: summary ? summary.slice(0, 320) : null,
+    summaryLine: null,
     creditLabels,
     statementCredits,
     protectionLabels,
-    benefitsSummary: benefitsSummary ? benefitsSummary.slice(0, 280) : null,
+    benefitsSummary: null,
   };
 }
 

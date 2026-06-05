@@ -2,7 +2,7 @@
  * One-off: download + store card art for a catalog slug.
  * Usage: npx tsx scripts/hydrate-catalog-card-image.ts amex-platinum
  */
-import { resolveAndPersistCatalogImage } from "../src/server/catalog-card-image";
+import { runCatalogImageJob } from "../src/server/catalog-image-pipeline";
 import { prisma } from "../src/lib/prisma";
 
 async function main() {
@@ -20,12 +20,10 @@ async function main() {
     process.exit(1);
   }
 
-  const url = await resolveAndPersistCatalogImage({
+  const result = await runCatalogImageJob({
     productSlug: slug,
     issuer: product.issuer,
     cardName: product.name,
-    currentImageUrl: product.imageUrl,
-    officialDocumentUrl: product.officialDocumentUrl,
     forceRefresh: true,
   });
 
@@ -34,7 +32,7 @@ async function main() {
     select: { byteSize: true, sourceUrl: true, mimeType: true },
   });
 
-  console.log(JSON.stringify({ imageUrl: url, blob }, null, 2));
+  console.log(JSON.stringify({ ...result, blob }, null, 2));
 }
 
 main()

@@ -10,6 +10,20 @@ const G_DINING = new Set([
   "food",
   "pub",
   "ice_cream_shop",
+  "coffee_shop",
+  "fast_food_restaurant",
+  "pizza_restaurant",
+  "hamburger_restaurant",
+  "sandwich_shop",
+  "breakfast_restaurant",
+  "brunch_restaurant",
+  "steak_house",
+  "seafood_restaurant",
+  "sushi_restaurant",
+  "wine_bar",
+  "dessert_shop",
+  "deli",
+  "food_court",
 ]);
 
 const G_GROCERIES = new Set([
@@ -42,12 +56,36 @@ const G_TRAVEL = new Set([
   "taxi_stand",
 ]);
 
-const G_RETAIL = new Set(["shopping_mall", "department_store"]);
+const G_RETAIL = new Set([
+  "shopping_mall",
+  "department_store",
+  "store",
+  "clothing_store",
+  "electronics_store",
+  "home_goods_store",
+  "hardware_store",
+  "sporting_goods_store",
+  "shoe_store",
+  "book_store",
+  "convenience_store",
+  "discount_store",
+  "furniture_store",
+  "jewelry_store",
+  "liquor_store",
+  "pet_store",
+  "gift_shop",
+  "home_improvement_store",
+  "beauty_salon",
+  "florist",
+]);
 
 export function hintFromGoogleTypes(
   types: string[] | undefined,
 ): SpendCategory | null {
   if (!types?.length) return null;
+  for (const x of types) {
+    if (x.endsWith("_restaurant")) return SpendCategory.DINING;
+  }
   for (const x of types) {
     if (G_DRUG.has(x)) return SpendCategory.DRUGSTORES;
   }
@@ -171,6 +209,9 @@ export function hintFromPlaceName(name: string): SpendCategory | null {
   }
   if (/\b(pharmacie|pharmacy|drugstore)\b/u.test(n)) {
     return SpendCategory.DRUGSTORES;
+  }
+  if (/\b(station|essence|gas|shell|bp|totalenergies|esso)\b/u.test(n)) {
+    return SpendCategory.GAS;
   }
   return null;
 }

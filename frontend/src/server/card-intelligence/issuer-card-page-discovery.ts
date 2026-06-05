@@ -21,6 +21,12 @@ import {
   looksLikeOfficialTermsHtmlPath,
   pathBonusForIntelDocument,
 } from "@/server/card-intelligence/intel-path-bonus";
+import {
+  coBrandIntelPathBonus,
+  guessCoBrandMarketingUrls,
+  guessRetailerProductPageUrls,
+  type CoBrandContext,
+} from "@/server/card-intelligence/co-brand-discovery";
 import { scorePdfCandidate } from "@/server/card-intelligence/pdf-discovery-query";
 
 type IntelDocumentKind = "pdf" | "html";
@@ -108,6 +114,7 @@ function scoreProductPageUrl(
     productSlug: string;
     exclusionTerms: string[];
     tokens: string[];
+    coBrand?: CoBrandContext | null;
   },
 ): number {
   let u: URL;
@@ -167,6 +174,7 @@ function scoreProductPageUrl(
     }
   }
 
+  s += coBrandIntelPathBonus(raw, args.coBrand);
   return s;
 }
 
@@ -178,6 +186,7 @@ function scoreRewardsRulesTarget(
     issuer: string;
     productSlug: string;
     exclusionTerms: string[];
+    coBrand?: CoBrandContext | null;
   },
 ): number {
   let u: URL;
@@ -223,6 +232,7 @@ function scoreRewardsRulesTarget(
   if (/#offerpop/i.test(raw)) {
     s += 85;
   }
+  s += coBrandIntelPathBonus(raw, args.coBrand);
   return s;
 }
 
@@ -260,6 +270,7 @@ function collectRulesFromHtml(
     issuer: string;
     productSlug: string;
     exclusionTerms: string[];
+    coBrand?: CoBrandContext | null;
   },
 ): Array<{ url: string; score: number }> {
   const base = new URL(pageUrl);
@@ -273,6 +284,20 @@ function collectRulesFromHtml(
         "offer details",
         scoreArgs,
       ) + 60;
+    rulesTargets.push({ url: productFetchUrl, score: sc });
+  }
+
+  if (
+    scoreArgs.coBrand &&
+    scoreRewardRichnessInPlainText(html) >= 22 &&
+    scoreArgs.coBrand.retailerHosts.some((h) => base.hostname.includes(h))
+  ) {
+    const sc =
+      scoreRewardsRulesTarget(
+        productFetchUrl,
+        "cash back rewards",
+        scoreArgs,
+      ) + 75;
     rulesTargets.push({ url: productFetchUrl, score: sc });
   }
 
@@ -360,6 +385,7 @@ export async function discoverIntelViaCardProductPage(args: {
   issuer: string;
   productSlug: string;
   exclusionTerms: string[];
+  coBrand?: CoBrandContext | null;
 }): Promise<{ url: string; sourceKind: IntelDocumentKind } | null> {
   const tokens = slugTokens(args.cardName, args.productSlug);
   const scoreArgs = {
@@ -368,6 +394,7 @@ export async function discoverIntelViaCardProductPage(args: {
     productSlug: args.productSlug,
     exclusionTerms: args.exclusionTerms,
     tokens,
+    coBrand: args.coBrand,
   };
 
   const productPages = new Map<string, number>();
@@ -378,6 +405,15 @@ export async function discoverIntelViaCardProductPage(args: {
     args.cardName,
   )) {
     productPages.set(guessed, 175);
+  }
+
+  if (args.coBrand) {
+    for (const u of guessCoBrandMarketingUrls(args.coBrand)) {
+      productPages.set(u, 210);
+    }
+    for (const u of guessRetailerProductPageUrls(args.productSlug, args.coBrand)) {
+      productPages.set(u, 235);
+    }
   }
 
   let hubFetches = 0;

@@ -9,7 +9,7 @@ export const CURATED_CATALOG_IMAGE_URLS: Record<string, string> = {
   "chase-sapphire-preferred":
     "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-sapphire-preferred/card-sapphire-preferred.png",
   "chase-sapphire-reserve":
-    "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-sapphire-reserve/card-sapphire-reserve.png",
+    "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-art/sapphire_reserve_card_Halo.png",
   "chase-freedom-unlimited":
     "https://creditcards.chase.com/content/dam/jpmc-marketplace/card-freedom-unlimited/card-freedom-unlimited.png",
   "chase-freedom-flex":
@@ -81,11 +81,18 @@ const CURATED_OFFICIAL_URLS: Record<string, string> = {
     "https://www.americanexpress.com/us/credit-cards/card/blue-cash-preferred/",
   "amex-blue-cash-everyday":
     "https://www.americanexpress.com/us/credit-cards/card/blue-cash-everyday/",
-  "amex-green": "https://www.americanexpress.com/us/credit-cards/card/green-card/",
+  "amex-green":
+    "https://www.americanexpress.com/us/credit-cards/card/green/",
   "citi-double-cash": "https://www.citi.com/credit-cards/citi-double-cash-credit-card",
   "discover-it": "https://www.discover.com/credit-cards/cash-back/it-card.html",
   "capital-one-venture-x":
     "https://www.capitalone.com/credit-cards/venture-x/",
+  "paypal-cashback-mastercard":
+    "https://www.paypal.com/us/digital-wallet/manage-money/paypal-cashback-mastercard",
+  "usbank-altitude-go":
+    "https://www.usbank.com/credit-cards/altitude-go-visa-signature-credit-card.html",
+  "usbank-cash-plus":
+    "https://www.usbank.com/credit-cards/cash-plus-visa-signature-credit-card.html",
 };
 
 type Raw = Pick<
