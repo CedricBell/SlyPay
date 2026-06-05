@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let response = NextResponse.json({ ok: true });
+  const response = NextResponse.json({ ok: true });
   clearSessionTrackingCookies(response);
 
   const supabase = createClientFromRequest(request, response);

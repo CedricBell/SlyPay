@@ -9,7 +9,7 @@ import {
 } from "@/lib/session-timeout";
 
 export async function POST(request: NextRequest) {
-  let response = NextResponse.json({ ok: true });
+  const response = NextResponse.json({ ok: true });
   const supabase = createClientFromRequest(request, response);
 
   const {
