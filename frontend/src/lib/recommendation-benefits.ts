@@ -294,6 +294,7 @@ export function buildCardSpendBenefits(args: {
   engineLines: string[];
   merchantExcluded?: boolean;
   ruleExcludedMerchants?: string[];
+  rotatingContextNote?: string | null;
 }): CardSpendBenefits {
   const extract = parseCatalogRewardsExtract(args.extractJson);
   const catLabel = categoryLabelFromUi(args.category);
@@ -319,6 +320,10 @@ export function buildCardSpendBenefits(args: {
     merchantExclusionNotes.push(
       `${args.merchantName} is excluded from ${catLabel.toLowerCase()} bonus categories.`,
     );
+  }
+
+  if (args.rotatingContextNote?.trim()) {
+    relevantCaveats.push(args.rotatingContextNote.trim());
   }
 
   if (extract) {

@@ -43,7 +43,7 @@ export default function AdminContributionsPage() {
       setData(res);
     } catch (e) {
       if (e instanceof ApiError) setErr(formatCaughtApiError(e));
-      else setErr("Erreur de chargement");
+      else setErr("Failed to load");
     }
   }, [filter]);
 
@@ -61,7 +61,7 @@ export default function AdminContributionsPage() {
       await load();
     } catch (e) {
       if (e instanceof ApiError) setErr(formatCaughtApiError(e));
-      else setErr("Échec de la mise à jour");
+      else setErr("Update failed");
     } finally {
       setBusyId(null);
     }
@@ -70,8 +70,8 @@ export default function AdminContributionsPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Signalements clients"
-        description="Notes « Missing something » sur les cartes du portefeuille. Marquez comme traité ou ignoré — relancez l’intel catalogue manuellement si besoin."
+        title="Customer feedback"
+        description="“Missing something” notes on wallet cards. Mark as resolved or dismiss — re-run catalog intel manually if needed."
       />
       <div className="flex gap-2">
         <Button
@@ -80,7 +80,7 @@ export default function AdminContributionsPage() {
           size="sm"
           onClick={() => setFilter("PENDING")}
         >
-          En attente
+          Pending
         </Button>
         <Button
           type="button"
@@ -88,7 +88,7 @@ export default function AdminContributionsPage() {
           size="sm"
           onClick={() => setFilter("ALL")}
         >
-          Tous
+          All
         </Button>
       </div>
       {err ? <StatusMessage variant="error">{err}</StatusMessage> : null}
@@ -112,7 +112,7 @@ export default function AdminContributionsPage() {
                   disabled={busyId === r.id}
                   onClick={() => void review(r.id, "APPLIED")}
                 >
-                  Marquer traité
+                  Mark resolved
                 </Button>
                 <Button
                   type="button"
@@ -121,7 +121,7 @@ export default function AdminContributionsPage() {
                   disabled={busyId === r.id}
                   onClick={() => void review(r.id, "DISMISSED")}
                 >
-                  Ignorer
+                  Dismiss
                 </Button>
               </div>
             ) : null}
@@ -129,7 +129,7 @@ export default function AdminContributionsPage() {
         ))}
       </div>
       {data && data.items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Aucun signalement.</p>
+        <p className="text-sm text-muted-foreground">No feedback yet.</p>
       ) : null}
     </div>
   );

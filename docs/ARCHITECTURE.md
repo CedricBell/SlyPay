@@ -1,30 +1,36 @@
 # SpendLess — system architecture
 
-## High-level diagram (textual)
+## Deployment topologies
+
+**B-lite (recommended):** Next.js hosts UI + `/api/v1` Route Handlers; Supabase Auth; Prisma → PostgreSQL.
+
+**Split (optional):** Next.js UI → NestJS API (`backend/`) with JWT access + refresh tokens → Prisma → PostgreSQL (see Docker Compose).
+
+## High-level diagram (B-lite)
 
 ```
-┌─────────────┐      HTTPS / JSON       ┌──────────────────┐
-│  Next.js    │ ◄──────────────────────► │  NestJS API      │
-│  (web)      │   JWT access (Bearer)   │  REST /api/v1    │
-└─────────────┘                         └────────┬─────────┘
-                                                 │
-                                        Prisma (SQL)
-                                                 │
-                                        ┌────────▼─────────┐
-                                        │  PostgreSQL      │
-                                        │  rules, offers,  │
-                                        │  merchants, logs │
-                                        └──────────────────┘
+┌──────────────────────────────────────────────┐
+│  Next.js (App Router)                        │
+│  UI + Route Handlers /api/v1                 │
+│  Supabase Auth (session cookies)             │
+└────────────────────┬─────────────────────────┘
+                     │ Prisma
+                     ▼
+            ┌──────────────────┐
+            │  PostgreSQL      │
+            │  rules, offers,  │
+            │  merchants, logs │
+            └──────────────────┘
 ```
 
-**Optional later workers** (not in MVP): offer-ingestion jobs, Plaid webhooks, notification fan-out. They would consume the same PostgreSQL schema and call the same pure decision engine package.
+**Optional later workers** (not in MVP): offer-ingestion jobs, Plaid webhooks, notification fan-out. They would consume the same PostgreSQL schema and call the same pure decision engine.
 
 ## Services
 
 | Service | Responsibility |
 |--------|------------------|
-| **web** | Auth UX, wallet CRUD, merchant autocomplete, recommendation form, reasoning display |
-| **api** | Auth (JWT + refresh), CRUD, category resolution, decision engine orchestration, recommendation logging |
+| **web / B-lite API** | Auth UX, wallet CRUD, merchant autocomplete, recommendation, catalog intel jobs |
+| **Nest API (optional)** | Same REST surface with JWT + refresh when running the split topology |
 | **db** | Source of truth for users, cards, rules, offers, merchants, MCC map, transactions, recommendation audit |
 
 ## Why REST (vs GraphQL)

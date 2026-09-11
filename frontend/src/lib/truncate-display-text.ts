@@ -37,3 +37,8 @@ export function formatProtectionHint(title: string, coverage: string): string {
   const combined = `${t}: ${c}`;
   return truncateAtSentenceBoundary(combined, 220);
 }
+
+/** Same one-line format as protections — used for lounge, hotel programs, status, etc. */
+export function formatPerkHint(title: string, description: string): string {
+  return formatProtectionHint(title, description);
+}

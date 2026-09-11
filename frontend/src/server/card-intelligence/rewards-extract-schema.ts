@@ -151,9 +151,11 @@ function normalizeStatementCredit(raw: unknown): {
   description: string;
   amountText?: string;
   cadence?: string;
+  annualCapText?: string;
   merchantHint?: string;
   categoryHint?: string;
   enrollmentRequired?: boolean;
+  notes?: string;
 } | null {
   if (!raw) return null;
   if (typeof raw === "string" || typeof raw === "number") {
@@ -163,6 +165,10 @@ function normalizeStatementCredit(raw: unknown): {
   const o = raw as Record<string, unknown>;
   const amountText = coerceToString(o.amountText ?? o.amount, "") || undefined;
   const cadence = coerceToString(o.cadence ?? o.frequency, "") || undefined;
+  const annualCapText =
+    coerceToString(o.annualCapText ?? o.annualCap ?? o.yearlyCap, "") ||
+    undefined;
+  const notes = coerceToString(o.notes, "") || undefined;
   const merchantHint =
     coerceToString(o.merchantHint ?? o.merchant ?? o.partner, "") || undefined;
   const categoryHint =
@@ -182,10 +188,12 @@ function normalizeStatementCredit(raw: unknown): {
     description,
     amountText,
     cadence,
+    annualCapText,
     merchantHint,
     categoryHint,
     enrollmentRequired:
       typeof o.enrollmentRequired === "boolean" ? o.enrollmentRequired : undefined,
+    notes,
   };
 }
 
@@ -336,9 +344,11 @@ export const rewardsExtractSchema = z.object({
         ),
       amountText: z.string().optional(),
       cadence: z.string().optional(),
+      annualCapText: z.string().optional(),
       merchantHint: z.string().optional(),
       categoryHint: z.string().optional(),
       enrollmentRequired: z.boolean().optional(),
+      notes: z.string().optional(),
     }),
   ),
   protections: z.array(

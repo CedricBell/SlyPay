@@ -65,7 +65,7 @@ export default function AdminCardCatalogPage() {
       setData(res);
     } catch (e) {
       if (e instanceof ApiError) setErr(formatCaughtApiError(e));
-      else setErr("Erreur de chargement");
+      else setErr("Failed to load");
     }
   }, []);
 
@@ -83,7 +83,7 @@ export default function AdminCardCatalogPage() {
       setCatDrafts(drafts);
     } catch (e) {
       if (e instanceof ApiError) setCatErr(formatCaughtApiError(e));
-      else setCatErr("Impossible de charger le catalogue");
+      else setCatErr("Failed to load catalog");
     }
   }, []);
 
@@ -113,7 +113,7 @@ export default function AdminCardCatalogPage() {
       await loadCatalogProducts();
     } catch (e) {
       if (e instanceof ApiError) setCatErr(formatCaughtApiError(e));
-      else setCatErr("Enregistrement impossible");
+      else setCatErr("Save failed");
     } finally {
       setCatBusy(null);
     }
@@ -132,7 +132,7 @@ export default function AdminCardCatalogPage() {
       await loadCatalogProducts();
     } catch (e) {
       if (e instanceof ApiError) setCatErr(formatCaughtApiError(e));
-      else setCatErr("Upload PDF impossible");
+      else setCatErr("PDF upload failed");
     } finally {
       setPdfBusy(null);
     }
@@ -161,7 +161,7 @@ export default function AdminCardCatalogPage() {
       await load();
     } catch (e) {
       if (e instanceof ApiError) setErr(formatCaughtApiError(e));
-      else setErr("Échec de l’application");
+      else setErr("Apply failed");
     } finally {
       setBusy(null);
     }
@@ -178,7 +178,7 @@ export default function AdminCardCatalogPage() {
       await load();
     } catch (e) {
       if (e instanceof ApiError) setErr(formatCaughtApiError(e));
-      else setErr("Échec du refus");
+      else setErr("Dismiss failed");
     } finally {
       setBusy(null);
     }
@@ -190,34 +190,34 @@ export default function AdminCardCatalogPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Intel catalogue" />
+      <PageHeader title="Catalog intel" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Valide une extraction PDF pour figer le snapshot catalogue et mettre à jour les{" "}
+          Approve a PDF extraction to lock the catalog snapshot and update the{" "}
           <code className="rounded bg-muted/50 px-1 py-0.5 text-xs dark:bg-card">
             RewardRule
           </code>{" "}
-          du produit catalogue (partagées par tous les exemplaires utilisateur).
+          rows for the catalog product (shared by all user instances).
         </p>
         <Button type="button" variant="outline" size="sm" onClick={() => load()}>
-          Rafraîchir
+          Refresh
         </Button>
       </div>
 
       <SurfaceCard className="p-4">
         <h3 className="text-sm font-semibold text-foreground dark:text-foreground">
-          PDF officiel & sources éditoriales
+          Official PDF & editorial sources
         </h3>
         <p className="mt-1 text-xs text-muted-foreground dark:text-muted-foreground">
-          Uploadez le PDF rewards/terms par produit — l&apos;intel LLM démarre
-          automatiquement. Les cartes ajoutées ensuite réutilisent l&apos;extrait sans
-          relancer l&apos;analyse. Les URLs éditoriales (TPG, NerdWallet) sont optionnelles
-          et concaténées après le PDF officiel.
+          Upload the rewards/terms PDF per product — LLM intel starts
+          automatically. Cards added later reuse the extract without re-running
+          analysis. Editorial URLs (TPG, NerdWallet) are optional and appended
+          after the official PDF.
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Input
             type="search"
-            placeholder="Filtrer par slug, nom ou émetteur…"
+            placeholder="Filter by slug, name, or issuer…"
             value={catFilter}
             onChange={(e) => setCatFilter(e.target.value)}
             className={`${inputClassName} min-w-48 flex-1`}
@@ -227,7 +227,7 @@ export default function AdminCardCatalogPage() {
             variant="outline"
             onClick={() => void loadCatalogProducts()}
           >
-            Recharger la liste
+            Reload list
           </Button>
         </div>
         {catErr ? (
@@ -236,7 +236,7 @@ export default function AdminCardCatalogPage() {
           </StatusMessage>
         ) : null}
         {catRows === null ? (
-          <p className="mt-3 text-sm text-muted-foreground">Chargement des produits catalogue…</p>
+          <p className="mt-3 text-sm text-muted-foreground">Loading catalog products…</p>
         ) : (
           <div className="mt-3 max-h-[28rem] overflow-auto rounded-lg border border-border dark:border-border">
             <table className="w-full min-w-[56rem] border-collapse text-left text-xs">
@@ -246,13 +246,13 @@ export default function AdminCardCatalogPage() {
                     Slug
                   </th>
                   <th className="border-b border-border p-2 font-semibold dark:border-border">
-                    Carte
+                    Card
                   </th>
                   <th className="border-b border-border p-2 font-semibold dark:border-border">
-                    PDF admin
+                    Admin PDF
                   </th>
                   <th className="border-b border-border p-2 font-semibold dark:border-border">
-                    URLs éditoriales
+                    Editorial URLs
                   </th>
                   <th className="border-b border-border p-2 font-semibold dark:border-border">
                     {" "}
@@ -273,11 +273,11 @@ export default function AdminCardCatalogPage() {
                       <div className="text-muted-foreground">{r.issuer}</div>
                       {r.hasCatalogExtract ? (
                         <span className="mt-1 inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                          Extrait OK
+                          Extract OK
                         </span>
                       ) : (
                         <span className="mt-1 inline-block text-[10px] text-muted-foreground">
-                          Pas d&apos;extrait
+                          No extract
                         </span>
                       )}
                     </td>
@@ -285,7 +285,7 @@ export default function AdminCardCatalogPage() {
                       {r.uploadedDocument ? (
                         <p className="text-[10px] text-muted-foreground">
                           {r.uploadedDocument.fileName ?? "PDF"} ·{" "}
-                          {Math.round(r.uploadedDocument.byteSize / 1024)} Ko
+                          {Math.round(r.uploadedDocument.byteSize / 1024)} KB
                         </p>
                       ) : null}
                       {r.officialDocumentUrl ? (
@@ -295,12 +295,12 @@ export default function AdminCardCatalogPage() {
                           rel="noreferrer"
                           className="mt-1 inline-block text-[10px] font-medium text-violet-700 underline dark:text-violet-400"
                         >
-                          Voir document
+                          View document
                         </a>
                       ) : null}
                       <label className="mt-2 flex cursor-pointer flex-col gap-1">
                         <span className="text-[10px] font-medium text-foreground">
-                          {pdfBusy === r.slug ? "Upload…" : "Choisir PDF"}
+                          {pdfBusy === r.slug ? "Uploading…" : "Choose PDF"}
                         </span>
                         <input
                           type="file"
@@ -352,13 +352,13 @@ export default function AdminCardCatalogPage() {
 
       {!data?.items.length ? (
         <SurfaceCard className="p-6 text-sm text-muted-foreground">
-          Aucune proposition en attente. Une ligne apparaît ici seulement lorsque
-          un <strong>nouveau</strong> PDF produit un extrait dont le hash{" "}
-          <strong>diffère</strong> du snapshot déjà enregistré sur le produit
-          catalogue. Au <strong>premier</strong> succès d&apos;intel, les règles
-          sont appliquées automatiquement aux cartes liées — il n&apos;y a alors
-          rien à valider ici. Ouvre la fiche carte : lien PDF, résumé extrait et
-          règles synchronisées.
+          No pending proposals. A row appears here only when a{" "}
+          <strong>new</strong> PDF produces an extract whose hash{" "}
+          <strong>differs</strong> from the snapshot already stored on the catalog
+          product. On the <strong>first</strong> successful intel run, rules are
+          applied automatically to linked cards — there is nothing to approve
+          here in that case. Open the card detail page for the PDF link, extract
+          summary, and synced rules.
         </SurfaceCard>
       ) : (
         <div className="space-y-4">
@@ -374,7 +374,7 @@ export default function AdminCardCatalogPage() {
                     slug: {row.product.slug}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Proposé le {new Date(row.createdAt).toLocaleString()}
+                    Proposed on {new Date(row.createdAt).toLocaleString()}
                   </p>
                   {row.product.officialDocumentUrl && (
                     <a
@@ -383,7 +383,7 @@ export default function AdminCardCatalogPage() {
                       rel="noreferrer"
                       className="mt-2 inline-block text-xs font-medium text-violet-700 underline dark:text-violet-400"
                     >
-                      Document PDF configuré
+                      Configured PDF document
                     </a>
                   )}
                 </div>
@@ -393,7 +393,7 @@ export default function AdminCardCatalogPage() {
                     disabled={busy === row.id}
                     onClick={() => apply(row.id)}
                   >
-                    {busy === row.id ? "…" : "Valider & synchroniser"}
+                    {busy === row.id ? "…" : "Apply & sync"}
                   </Button>
                   <Button
                     type="button"
@@ -401,18 +401,18 @@ export default function AdminCardCatalogPage() {
                     disabled={busy === row.id}
                     onClick={() => dismiss(row.id)}
                   >
-                    Refuser
+                    Reject
                   </Button>
                 </div>
               </div>
 
               <dl className="mt-4 grid gap-2 text-xs text-muted-foreground dark:text-muted-foreground sm:grid-cols-2">
                 <div>
-                  <dt className="font-medium text-muted-foreground">Hash précédent</dt>
-                  <dd className="break-all font-mono">{row.previousHash ?? "— (premier état)"}</dd>
+                  <dt className="font-medium text-muted-foreground">Previous hash</dt>
+                  <dd className="break-all font-mono">{row.previousHash ?? "— (first state)"}</dd>
                 </div>
                 <div>
-                  <dt className="font-medium text-muted-foreground">Hash proposé</dt>
+                  <dt className="font-medium text-muted-foreground">Proposed hash</dt>
                   <dd className="break-all font-mono">{row.proposedHash}</dd>
                 </div>
               </dl>
@@ -425,7 +425,7 @@ export default function AdminCardCatalogPage() {
                   setExpanded((m) => ({ ...m, [row.id]: !m[row.id] }))
                 }
               >
-                {expanded[row.id] ? "Masquer le JSON" : "Voir le JSON extrait"}
+                {expanded[row.id] ? "Hide JSON" : "View extracted JSON"}
               </Button>
               {expanded[row.id] && (
                 <pre className="mt-2 max-h-80 overflow-auto rounded-lg bg-card p-3 text-[11px] text-violet-100">
@@ -438,7 +438,7 @@ export default function AdminCardCatalogPage() {
       )}
 
       <p className="text-xs text-muted-foreground">
-        Variables d’environnement et commandes Prisma : fichier{" "}
+        Environment variables and Prisma commands: see{" "}
         <code className="rounded bg-muted/50 px-1 dark:bg-card">frontend/.env.example</code>
         .
       </p>

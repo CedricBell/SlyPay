@@ -9,6 +9,7 @@ import {
   filterRotatingQuartersForCategory,
   REFERENCE_PURCHASE_USD,
 } from "@/lib/recommendation-benefits";
+import { rotatingRelevanceNote } from "@/lib/rotating-rewards";
 import { resolveSpendCategory } from "@/server/category-resolver";
 import { decideBestCard } from "@/server/decision-engine";
 import type { EngineCard } from "@/server/decision-engine.types";
@@ -190,6 +191,9 @@ export async function POST(req: NextRequest) {
       engineLines: r.explanationLines,
       merchantExcluded: r.merchantExcluded,
       ruleExcludedMerchants: matchedRule?.excludedMerchants,
+      rotatingContextNote: calJson
+        ? rotatingRelevanceNote(calJson, resolution.category, now)
+        : null,
     });
     return {
       cardId: r.cardId,
@@ -218,6 +222,15 @@ export async function POST(req: NextRequest) {
     ? dbCards.find((c) => c.id === engineResult.bestCardId)
     : undefined;
 
+  const bestCalJson =
+    bestWallet?.catalogProduct?.rotatingBonusCalendar ??
+    CARD_CATALOG_ENTRIES.find(
+      (e) =>
+        e.id ===
+        (bestWallet?.catalogProduct?.slug ?? bestWallet?.catalogProductSlug),
+    )?.rotatingBonusCalendar ??
+    null;
+
   const bestCardBenefits =
     winnerScore && bestWallet
       ? buildCardSpendBenefits({
@@ -231,6 +244,9 @@ export async function POST(req: NextRequest) {
           ruleExcludedMerchants: rewardRulesForWalletCard(bestWallet).find(
             (rule) => rule.category === resolution.category,
           )?.excludedMerchants,
+          rotatingContextNote: bestCalJson
+            ? rotatingRelevanceNote(bestCalJson, resolution.category, now)
+            : null,
         })
       : null;
 

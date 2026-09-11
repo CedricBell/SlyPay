@@ -72,7 +72,7 @@ export default function AdminCreditCardsPage() {
       setData(res);
     } catch (e) {
       if (e instanceof ApiError) setErr(formatCaughtApiError(e));
-      else setErr("Erreur de chargement");
+      else setErr("Failed to load");
     }
   }, [page]);
 
@@ -90,7 +90,7 @@ export default function AdminCreditCardsPage() {
       await load();
     } catch (e) {
       if (e instanceof ApiError) setErr(formatCaughtApiError(e));
-      else setErr("Échec du relancement intel");
+      else setErr("Failed to re-run intel");
     } finally {
       setRefreshingSlug(null);
     }
@@ -106,7 +106,7 @@ export default function AdminCreditCardsPage() {
       await load();
     } catch (e) {
       if (e instanceof ApiError) setErr(formatCaughtApiError(e));
-      else setErr("Échec du téléchargement de l'image");
+      else setErr("Failed to download image");
     } finally {
       setRefreshingImageSlug(null);
     }
@@ -118,18 +118,18 @@ export default function AdminCreditCardsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Catalogue cartes (produits)" />
+      <PageHeader title="Card catalog (products)" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          {data?.total ?? "—"} produit(s) catalogue — règles et PDF partagés par
-          tous les exemplaires en portefeuille. Édition réservée aux admins via{" "}
+          {data?.total ?? "—"} catalog product(s) — rules and PDF shared by all
+          wallet instances. Editing is admin-only via{" "}
           <Link href="/admin/card-catalog" className="font-medium text-primary underline">
-            Intel catalogue
+            Catalog intel
           </Link>
           .
         </p>
         <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
-          Rafraîchir
+          Refresh
         </Button>
       </div>
 
@@ -143,12 +143,12 @@ export default function AdminCreditCardsPage() {
         <table className="w-full min-w-[920px] text-left text-sm">
           <thead className="border-b border-border bg-muted/40">
             <tr>
-              <th className="px-3 py-2 font-medium">Produit catalogue</th>
-              <th className="px-3 py-2 font-medium">Exemplaires</th>
-              <th className="px-3 py-2 font-medium">Extrait PDF</th>
-              <th className="px-3 py-2 font-medium">Règles</th>
-              <th className="px-3 py-2 font-medium">Job intel</th>
-              <th className="px-3 py-2 font-medium">Màj</th>
+              <th className="px-3 py-2 font-medium">Catalog product</th>
+              <th className="px-3 py-2 font-medium">Instances</th>
+              <th className="px-3 py-2 font-medium">PDF extract</th>
+              <th className="px-3 py-2 font-medium">Rules</th>
+              <th className="px-3 py-2 font-medium">Intel job</th>
+              <th className="px-3 py-2 font-medium">Updated</th>
               <th className="px-3 py-2 font-medium">Actions</th>
             </tr>
           </thead>
@@ -165,16 +165,16 @@ export default function AdminCreditCardsPage() {
                 <td className="px-3 py-2 text-xs">
                   <span className="font-semibold">{r.walletInstanceCount}</span>
                   <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    portefeuilles utilisateur
+                    user wallets
                   </p>
                 </td>
                 <td className="px-3 py-2 text-xs">
                   {r.hasCatalogExtract ? (
                     <span className="inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
-                      Extrait OK
+                      Extract OK
                     </span>
                   ) : (
-                    <span className="text-muted-foreground">Pas d&apos;extrait</span>
+                    <span className="text-muted-foreground">No extract</span>
                   )}
                   {r.officialDocumentUrl ? (
                     <a
@@ -263,7 +263,7 @@ export default function AdminCreditCardsPage() {
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
-            Précédent
+            Previous
           </Button>
           <span className="text-muted-foreground">
             Page {data.page} / {data.pages}
@@ -275,7 +275,7 @@ export default function AdminCreditCardsPage() {
             disabled={page >= data.pages}
             onClick={() => setPage((p) => p + 1)}
           >
-            Suivant
+            Next
           </Button>
         </div>
       )}

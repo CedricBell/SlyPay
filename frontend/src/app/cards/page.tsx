@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { Plus } from "lucide-react";
 import { WalletStack } from "@/components/wallet-stack";
 import { useAppData } from "@/lib/app-data";
-import { intelIsActive } from "@/lib/card-intel-status";
 import { FadeIn } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
@@ -21,9 +20,7 @@ export default function CardsPage() {
     if (!me) router.replace("/login");
   }, [me, meReady, router]);
 
-  const needsPoll =
-    cards != null &&
-    cards.some((c) => c.walletScoreAnalyzing || intelIsActive(c.intelJob));
+  const needsPoll = cards?.some((c) => c.walletScoreAnalyzing) ?? false;
 
   useEffect(() => {
     if (!needsPoll) return;
@@ -43,7 +40,7 @@ export default function CardsPage() {
         <PageHeader
           eyebrow="Wallet"
           title="My cards"
-          description="Your cards, rewards, and perks — stacked like a real wallet."
+          description="Hover a card to preview rewards — your wallet on the left, details on the right."
         />
         {cards && cards.length > 0 && (
           <Button variant="gradient" className="gap-1.5" asChild>
@@ -56,9 +53,11 @@ export default function CardsPage() {
       </div>
 
       {loading ? (
-        <div className="mx-auto max-w-lg space-y-4 pt-2">
-          <Skeleton className="h-44 w-full rounded-[1.35rem]" />
-          <Skeleton className="h-44 w-full rounded-[1.35rem]" />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,220px)_1fr] lg:gap-8">
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="hidden h-10 w-full rounded-lg lg:block" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="hidden h-72 w-full rounded-[1.35rem] lg:block" />
         </div>
       ) : (
         <WalletStack cards={cards ?? []} />

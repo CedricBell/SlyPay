@@ -7,8 +7,13 @@ import type {
 } from "@prisma/client";
 import { dec } from "@/lib/serialize";
 import { rewardRulesForWalletCard } from "@/lib/credit-card-rules";
+import {
+  buildRotatingQuarterPreviews,
+  walletEarnHighlights,
+} from "@/lib/rotating-rewards";
 import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 import {
+  formatStatementCreditLineFromDisplay,
   statementCreditsFromExtractJson,
   toStatementCreditDisplay,
   type StatementCreditDisplay,
@@ -18,7 +23,38 @@ import {
   resolveCatalogImageUrl,
   resolveCatalogImageUrlByIssuerAndName,
 } from "@/server/catalog-card-art";
-import { formatProtectionHint } from "@/lib/truncate-display-text";
+import { formatPerkHint, formatProtectionHint } from "@/lib/truncate-display-text";
+
+export type WalletPerkPreview = {
+  title: string;
+  description: string;
+  categoryHint: string | null;
+  hint: string;
+};
+
+export function walletPerkKey(perk: WalletPerkPreview, index: number): string {
+  return `${index}-${perk.title}-${perk.hint}-${perk.description.slice(0, 48)}`;
+}
+
+function isPlaceholderPerk(title: string, description: string): boolean {
+  return (
+    title.trim().toLowerCase() === "perk" &&
+    description.trim().toLowerCase() === "perk"
+  );
+}
+
+function dedupePerkPreviews(items: WalletPerkPreview[]): WalletPerkPreview[] {
+  const seen = new Set<string>();
+  const out: WalletPerkPreview[] = [];
+  for (const p of items) {
+    if (isPlaceholderPerk(p.title, p.description)) continue;
+    const k = `${p.title}\0${p.description}\0${p.hint}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(p);
+  }
+  return out;
+}
 
 export type CardWithRules = CreditCard & {
   offers: Offer[];
@@ -45,6 +81,8 @@ export type CardWithRulesAndCatalog = CardWithRules & {
       cadence: string | null;
       merchantHint: string | null;
       coverageSummary: string | null;
+      limitsText: string | null;
+      enrollmentRequired?: boolean;
     }>;
   }) | null;
   intelJobs?: Array<{
@@ -82,9 +120,88 @@ function statementCreditsFromCatalogBenefits(
         description: b.title,
         amountText: b.amountText,
         cadence: b.cadence,
+        annualCapText: b.limitsText,
         merchantHint: b.merchantHint,
+        notes: b.description,
+        enrollmentRequired: b.enrollmentRequired,
       }),
     );
+}
+
+function protectionsFromCatalogBenefits(
+  benefits: CatalogBenefitRow[] | undefined,
+): string[] {
+  if (!benefits?.length) return [];
+  return benefits
+    .filter((b) => b.kind === "PROTECTION")
+    .slice(0, 24)
+    .map((b) =>
+      formatProtectionHint(b.title, b.coverageSummary ?? b.description ?? ""),
+    );
+}
+
+function perksFromCatalogBenefits(
+  benefits: CatalogBenefitRow[] | undefined,
+): WalletPerkPreview[] {
+  if (!benefits?.length) return [];
+  return dedupePerkPreviews(
+    benefits
+      .filter((b) => b.kind === "PERK")
+      .slice(0, 24)
+      .map((b) => {
+        const title = b.title.trim();
+        const description = (b.description ?? b.title).trim();
+        return {
+          title,
+          description,
+          categoryHint: null,
+          hint: formatPerkHint(title, description),
+        };
+      }),
+  );
+}
+
+function protectionsFromExtractJson(json: unknown): string[] {
+  if (!json || typeof json !== "object") return [];
+  const prot = (json as { protections?: unknown }).protections;
+  if (!Array.isArray(prot)) return [];
+  const labels: string[] = [];
+  for (const item of prot.slice(0, 24)) {
+    if (!item || typeof item !== "object" || !("title" in item)) continue;
+    const t = (item as { title?: string; coverageSummary?: string }).title;
+    const c = (item as { coverageSummary?: string }).coverageSummary;
+    if (t) labels.push(formatProtectionHint(t, c ?? ""));
+  }
+  return labels;
+}
+
+function perksFromExtractJson(json: unknown): WalletPerkPreview[] {
+  if (!json || typeof json !== "object") return [];
+  const rows = (json as { perks?: unknown }).perks;
+  if (!Array.isArray(rows)) return [];
+  const out: WalletPerkPreview[] = [];
+  for (const item of rows.slice(0, 24)) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    const title = String(row.title ?? row.name ?? "").trim();
+    if (!title) continue;
+    const description = String(
+      row.description ?? row.summary ?? row.text ?? title,
+    ).trim();
+    const categoryHint =
+      row.categoryHint != null
+        ? String(row.categoryHint)
+        : row.category != null
+          ? String(row.category)
+          : null;
+    out.push({
+      title,
+      description,
+      categoryHint,
+      hint: formatPerkHint(title, description),
+    });
+  }
+  return dedupePerkPreviews(out);
 }
 
 function summarizeExtract(
@@ -95,57 +212,58 @@ function summarizeExtract(
   creditLabels: string[];
   statementCredits: StatementCreditDisplay[];
   protectionLabels: string[];
+  perkHints: WalletPerkPreview[];
   benefitsSummary: string | null;
 } {
-  const fromBenefits = statementCreditsFromCatalogBenefits(catalogBenefits);
+  const catalogCredits = statementCreditsFromCatalogBenefits(catalogBenefits);
+  const catalogProtections = protectionsFromCatalogBenefits(catalogBenefits);
+  const catalogPerks = perksFromCatalogBenefits(catalogBenefits);
 
   if (!json || typeof json !== "object") {
-    const creditLabels = fromBenefits.map((d) => {
-      const parts = [d.title, d.amountText, d.cadence].filter(Boolean);
-      return parts.join(" · ");
-    });
+    const creditLabels = catalogCredits.map((d) =>
+      formatStatementCreditLineFromDisplay(d),
+    );
     return {
       summaryLine: null,
       creditLabels,
-      statementCredits: fromBenefits,
-      protectionLabels: [],
+      statementCredits: catalogCredits,
+      protectionLabels: catalogProtections,
+      perkHints: catalogPerks,
       benefitsSummary: null,
     };
   }
   const o = json as Record<string, unknown>;
-  const summary = typeof o.summary === "string" ? o.summary : null;
   const benefitsSummary =
     typeof o.benefitsSummary === "string" ? o.benefitsSummary : null;
   const fromExtract = statementCreditsFromExtractJson(json, 12);
   const statementCredits =
-    fromBenefits.length > 0 ? fromBenefits : fromExtract;
-  const creditLabels = statementCredits.map((d) => {
-    const parts = [d.title, d.amountText, d.cadence].filter(Boolean);
-    return parts.join(" · ").slice(0, 200);
-  });
-  const protectionLabels: string[] = [];
-  const prot = o.protections;
-  if (Array.isArray(prot)) {
-    for (const item of prot.slice(0, 24)) {
-      if (item && typeof item === "object" && "title" in item) {
-        const t = (item as { title?: string; coverageSummary?: string }).title;
-        const c = (item as { coverageSummary?: string }).coverageSummary;
-        if (t) {
-          protectionLabels.push(formatProtectionHint(t, c ?? ""));
-        }
-      }
-    }
-  }
+    catalogCredits.length > 0 ? catalogCredits : fromExtract;
+  const creditLabels = statementCredits.map((d) =>
+    formatStatementCreditLineFromDisplay(d),
+  );
+  const extractProtections = protectionsFromExtractJson(json);
+  const extractPerks = perksFromExtractJson(json);
+  const protectionLabels =
+    catalogProtections.length > 0 ? catalogProtections : extractProtections;
+  const perkHints = catalogPerks.length > 0 ? catalogPerks : extractPerks;
+
   return {
     summaryLine: null,
     creditLabels,
     statementCredits,
     protectionLabels,
-    benefitsSummary: null,
+    perkHints,
+    benefitsSummary,
   };
 }
 
-function rulesStrengthLines(rules: RewardRule[]): string[] {
+function rulesStrengthLines(
+  rules: RewardRule[],
+  rotatingCal: unknown,
+): string[] {
+  if (rotatingCal) {
+    return walletEarnHighlights(rules, rotatingCal);
+  }
   const sorted = [...rules].sort(
     (a, b) => Number(b.multiplier) - Number(a.multiplier),
   );
@@ -167,6 +285,7 @@ export function mapCreditCardJson(c: CardWithRulesAndCatalog) {
     creditLabels,
     statementCredits,
     protectionLabels,
+    perkHints,
     benefitsSummary,
   } = summarizeExtract(extractJson, catalogProduct?.benefits);
   const rotatingCal =
@@ -180,8 +299,14 @@ export function mapCreditCardJson(c: CardWithRulesAndCatalog) {
     (latestIntelJob.status === "PENDING" ||
       latestIntelJob.status === "RUNNING");
   const hasRules = rewardRules.length > 0;
+  const INTEL_BOOTSTRAP_MS = 2 * 60_000;
+  const createdAtMs = rest.createdAt ? new Date(rest.createdAt).getTime() : 0;
+  const awaitingIntelJob =
+    latestIntelJob == null &&
+    createdAtMs > 0 &&
+    Date.now() - createdAtMs < INTEL_BOOTSTRAP_MS;
   const walletScoreAnalyzing =
-    !hasRules && linked && (intelActive || latestIntelJob == null);
+    !hasRules && linked && (intelActive || awaitingIntelJob);
 
   const intelJob: MappedIntelJob | null = latestIntelJob
     ? {
@@ -213,12 +338,16 @@ export function mapCreditCardJson(c: CardWithRulesAndCatalog) {
     walletScoreAnalyzing,
     intelJob,
     walletPreview: {
-      ruleHighlights: rulesStrengthLines(rewardRules),
+      ruleHighlights: rulesStrengthLines(rewardRules, rotatingCal),
       pdfSummary: summaryLine,
       benefitsSummary,
       statementCreditHints: creditLabels,
       statementCredits,
       protectionHints: protectionLabels,
+      perkHints,
+      rotatingQuarters: rotatingCal
+        ? buildRotatingQuarterPreviews(rotatingCal)
+        : undefined,
     },
     catalogImageUrl:
       catalogImageSrcForDisplay(

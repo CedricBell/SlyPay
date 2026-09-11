@@ -19,15 +19,11 @@ export async function applyBenefitsFromExtract(
       catalogProductSlug,
       kind: CardBenefitKind.STATEMENT_CREDIT,
       title,
-      description:
-        sc.merchantHint?.trim() ||
-        sc.categoryHint?.trim() ||
-        sc.description.trim() !== title
-          ? sc.description.trim()
-          : null,
+      description: sc.notes?.trim() || sc.description.trim() || null,
       amountText: sc.amountText?.trim() ?? null,
       cadence: sc.cadence?.trim() ?? null,
       merchantHint: sc.merchantHint?.trim() ?? null,
+      limitsText: sc.annualCapText?.trim() ?? null,
       category: spendCategoryFromHint(sc.categoryHint),
       enrollmentRequired: sc.enrollmentRequired ?? false,
       priority: priority++,

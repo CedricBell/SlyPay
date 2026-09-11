@@ -1,14 +1,38 @@
 import type { RewardRule } from "@prisma/client";
+import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
+import { sanitizeRewardRulesForRotatingCalendar } from "@/lib/rotating-rewards";
 
 export type CatalogProductWithRules = {
   rewardRules?: RewardRule[];
+  rotatingBonusCalendar?: unknown;
+  slug?: string;
 } | null;
+
+function rotatingCalendarForCard(card: {
+  catalogProduct?: CatalogProductWithRules;
+  catalogProductSlug?: string | null;
+}): unknown {
+  return (
+    card.catalogProduct?.rotatingBonusCalendar ??
+    CARD_CATALOG_ENTRIES.find(
+      (e) =>
+        e.id ===
+        (card.catalogProduct?.slug ?? card.catalogProductSlug ?? ""),
+    )?.rotatingBonusCalendar ??
+    null
+  );
+}
 
 /** Reward rules live on the catalog product; wallet cards inherit via slug link. */
 export function rewardRulesForWalletCard(card: {
   catalogProduct?: CatalogProductWithRules;
+  catalogProductSlug?: string | null;
 }): RewardRule[] {
-  return card.catalogProduct?.rewardRules ?? [];
+  const raw = card.catalogProduct?.rewardRules ?? [];
+  return sanitizeRewardRulesForRotatingCalendar(
+    raw,
+    rotatingCalendarForCard(card),
+  );
 }
 
 /** Lighter include for wallet list (skips large extract JSON blobs). */
@@ -26,6 +50,9 @@ export const walletCardListInclude = {
         orderBy: [{ priority: "asc" as const }, { multiplier: "desc" as const }],
       },
       imageUrl: true,
+      benefits: {
+        orderBy: [{ priority: "asc" as const }],
+      },
     },
   },
   intelJobs: {

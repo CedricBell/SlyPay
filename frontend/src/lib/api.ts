@@ -17,13 +17,13 @@ export class ApiError extends Error {
 export function formatApiErrorForUser(body: string, status: number): string {
   const raw = (body ?? "").trim();
   if (!raw) {
-    return `Erreur HTTP ${status}`;
+    return `HTTP error ${status}`;
   }
   if (raw.startsWith("<!") || raw.startsWith("<html")) {
     return [
-      `Le serveur a renvoyé une page d’erreur (${status}) au lieu de JSON.`,
-      "Cause fréquente : cache `.next` corrompu ou mélange Turbopack / Webpack.",
-      "Arrête le serveur, puis `cd frontend && npm run dev:clean` (efface `.next` une fois) ou `npm run dev` si le cache est déjà sain. Un seul terminal `next dev`.",
+      `The server returned an error page (${status}) instead of JSON.`,
+      "Common cause: corrupt `.next` cache or mixing Turbopack / Webpack.",
+      "Stop the server, then `cd frontend && npm run dev:clean` (clears `.next` once) or `npm run dev` if the cache is already healthy. Run a single `next dev` terminal.",
     ].join(" ");
   }
   try {

@@ -2,7 +2,14 @@ node_modules
 dist
 .next
 .env
-.env.local
+.env.*
+!.env.example
+!**/.env.example
 coverage
 *.log
 .DS_Store
+.vercel
+*.pem
+.idea
+.vscode
+*.tsbuildinfo

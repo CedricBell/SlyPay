@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { UserRound } from "lucide-react";
+import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import { apiFetch, ApiError, invalidateApiCache } from "@/lib/api";
 import { useAppData } from "@/lib/app-data";
 import { FadeIn } from "@/components/motion";
 import { PageHeader } from "@/components/page-header";
-import { StatusMessage } from "@/components/status-message";
 import { Button } from "@/components/ui/button";
 import { Field, inputClassName } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -39,11 +39,11 @@ function initials(first: string, last: string, email: string): string {
   return e ? e.toUpperCase() : "?";
 }
 
+const ACCOUNT_TOAST_MS = 3000;
+
 export default function AccountPage() {
   const router = useRouter();
   const { me, meReady, refreshMe } = useAppData();
-  const [err, setErr] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [loginEmail, setLoginEmail] = useState("");
@@ -106,15 +106,11 @@ export default function AccountPage() {
   const cancel = () => {
     if (!snapshot) return;
     applySnapshot(snapshot);
-    setErr(null);
-    setMsg(null);
   };
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!snapshot) return;
-    setErr(null);
-    setMsg(null);
 
     const wantsProfile =
       firstName !== snapshot.firstName || lastName !== snapshot.lastName;
@@ -123,21 +119,27 @@ export default function AccountPage() {
     const wantsPassword = newPassword.length > 0;
 
     if (!wantsProfile && !wantsEmail && !wantsPassword) {
-      setMsg("No changes to save.");
+      toast.warning("No changes to save.", { duration: ACCOUNT_TOAST_MS });
       return;
     }
 
     if (wantsPassword) {
       if (newPassword.length < 8) {
-        setErr("Password must be at least 8 characters.");
+        toast.error("Password must be at least 8 characters.", {
+          duration: ACCOUNT_TOAST_MS,
+        });
         return;
       }
       if (newPassword !== confirmPassword) {
-        setErr("New passwords do not match.");
+        toast.error("New passwords do not match.", {
+          duration: ACCOUNT_TOAST_MS,
+        });
         return;
       }
       if (!currentPassword) {
-        setErr("Enter your current password to set a new one.");
+        toast.error("Enter your current password to set a new one.", {
+          duration: ACCOUNT_TOAST_MS,
+        });
         return;
       }
     }
@@ -161,7 +163,7 @@ export default function AccountPage() {
           email: email.trim(),
         });
         if (error) {
-          setErr(error.message);
+          toast.error(error.message, { duration: ACCOUNT_TOAST_MS });
           return;
         }
         messages.push(
@@ -175,14 +177,16 @@ export default function AccountPage() {
           password: currentPassword,
         });
         if (signInErr) {
-          setErr("Current password is incorrect.");
+          toast.error("Current password is incorrect.", {
+            duration: ACCOUNT_TOAST_MS,
+          });
           return;
         }
         const { error } = await supabase.auth.updateUser({
           password: newPassword,
         });
         if (error) {
-          setErr(error.message);
+          toast.error(error.message, { duration: ACCOUNT_TOAST_MS });
           return;
         }
         messages.push("Password updated");
@@ -200,10 +204,13 @@ export default function AccountPage() {
       applySnapshot(next);
       invalidateApiCache("/auth/me");
       void refreshMe(true);
-      setMsg(messages.join(". ") + ".");
+      toast.success(messages.join(". ") + ".", { duration: ACCOUNT_TOAST_MS });
     } catch (e) {
-      if (e instanceof ApiError) setErr(e.message);
-      else setErr("Could not save changes");
+      if (e instanceof ApiError) {
+        toast.error(e.message, { duration: ACCOUNT_TOAST_MS });
+      } else {
+        toast.error("Could not save changes", { duration: ACCOUNT_TOAST_MS });
+      }
     } finally {
       setSaving(false);
     }
@@ -255,9 +262,6 @@ export default function AccountPage() {
           </p>
         </div>
       </div>
-
-      {err ? <StatusMessage variant="error">{err}</StatusMessage> : null}
-      {msg ? <StatusMessage variant="info">{msg}</StatusMessage> : null}
 
       <SurfaceCard disableMotion className="overflow-hidden p-0">
         <form onSubmit={save}>

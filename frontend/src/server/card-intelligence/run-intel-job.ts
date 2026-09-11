@@ -325,8 +325,8 @@ export async function runCardIntelJob(params: {
         Boolean(process.env.GOOGLE_API_KEY?.trim()) &&
         Boolean(process.env.GOOGLE_CSE_ID?.trim());
       const hint = !hasBrave && !hasGoogle
-        ? "Aucune source officielle trouvée — vérifiez BRAVE_SEARCH_API_KEY et/ou GOOGLE_API_KEY + GOOGLE_CSE_ID (recherche open-web activée par défaut), ou uploadez un PDF (admin)."
-        : "Aucune page « rewards / rules » trouvée — uploadez un PDF (admin), vérifiez banque + nom de carte, ou renseignez officialDocumentUrl.";
+        ? "No official source found — set BRAVE_SEARCH_API_KEY and/or GOOGLE_API_KEY + GOOGLE_CSE_ID (open-web search is on by default), or upload a PDF in admin."
+        : "No rewards/rules page found — upload a PDF in admin, check issuer + card name, or set officialDocumentUrl.";
       await prisma.cardIntelJob.update({
         where: { id: job.id },
         data: {

@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import { ChevronRight, Plus } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { ChevronRight, Plus, Sparkles } from "lucide-react";
 import { CardIntelProgress } from "@/components/card-intel-progress";
 import { CardThumbnail } from "@/components/CardThumbnail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { MappedIntelJob } from "@/lib/map-credit-card";
+import { walletPerkKey, type MappedIntelJob, type WalletPerkPreview } from "@/lib/map-credit-card";
+import type { RotatingQuarterPreview } from "@/lib/rotating-rewards";
 import { intelHasFailed } from "@/lib/card-intel-status";
 import type { StatementCreditDisplay } from "@/lib/statement-credit-display";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,8 @@ export type WalletCard = {
     statementCreditHints: string[];
     statementCredits?: StatementCreditDisplay[];
     protectionHints: string[];
+    perkHints?: WalletPerkPreview[];
+    rotatingQuarters?: RotatingQuarterPreview[];
   };
   catalogImageUrl?: string | null;
 };
@@ -39,9 +42,299 @@ type Props = {
   cards: WalletCard[];
 };
 
+function CardRewardsBody({ card }: { card: WalletCard }) {
+  if (card.walletScoreAnalyzing) {
+    return (
+      <CardIntelProgress
+        intelJob={card.intelJob}
+        pdfSummary={card.walletPreview.pdfSummary}
+        creditHints={card.walletPreview.statementCreditHints}
+        ruleHighlights={card.walletPreview.ruleHighlights}
+      />
+    );
+  }
+
+  if (
+    intelHasFailed(card.intelJob) &&
+    card.walletPreview.ruleHighlights.length === 0
+  ) {
+    return (
+      <CardIntelProgress
+        intelJob={card.intelJob}
+        pdfSummary={card.walletPreview.pdfSummary}
+        creditHints={card.walletPreview.statementCreditHints}
+        ruleHighlights={[]}
+      />
+    );
+  }
+
+  if (card.walletPreview.ruleHighlights.length > 0) {
+    return (
+      <div className="space-y-4">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Top earn rates
+          </p>
+          <ul className="mt-2 flex flex-wrap gap-1.5">
+            {card.walletPreview.ruleHighlights.map((line) => (
+              <li
+                key={line}
+                className="rounded-full bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-foreground/90"
+              >
+                {line.replaceAll("_", " ")}
+              </li>
+            ))}
+          </ul>
+          {card.walletPreview.benefitsSummary ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              {card.walletPreview.benefitsSummary}
+            </p>
+          ) : null}
+        </div>
+
+        {(card.walletPreview.rotatingQuarters?.length ?? 0) > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Quarterly 5% categories
+            </p>
+            <ul className="mt-2 space-y-2">
+              {card.walletPreview.rotatingQuarters!.map((q) => (
+                <li
+                  key={`${q.label}-${q.validFrom}`}
+                  className={cn(
+                    "rounded-lg border px-3 py-2 text-sm",
+                    q.isActive
+                      ? "border-orange-300/60 bg-orange-50/80 dark:border-orange-500/30 dark:bg-orange-950/30"
+                      : "border-border/60 bg-muted/30",
+                  )}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-foreground">
+                      {q.label}
+                    </span>
+                    {q.isActive ? (
+                      <Badge
+                        variant="secondary"
+                        className="h-5 bg-orange-200/80 text-[10px] text-orange-950 dark:bg-orange-900/60 dark:text-orange-100"
+                      >
+                        Active now
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {q.multiplier}% on{" "}
+                    {q.categories.map((c) => c.replaceAll("_", " ").toLowerCase()).join(", ")}
+                    {q.details ? ` — ${q.details}` : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Activate each quarter on the issuer site — rewards are not retroactive. Combined
+              bonus spend is typically capped at $1,500/quarter.
+            </p>
+          </div>
+        )}
+
+        {(card.walletPreview.statementCredits?.length ??
+          card.walletPreview.statementCreditHints.length) > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Statement credits
+            </p>
+            <ul className="mt-2 space-y-2.5">
+              {(card.walletPreview.statementCredits?.length
+                ? card.walletPreview.statementCredits
+                : card.walletPreview.statementCreditHints.map((hint) => ({
+                    title: hint,
+                    amountText: null,
+                    cadence: null,
+                    amountSummary: null,
+                    merchantHint: null,
+                    enrollmentRequired: false,
+                    detail: null,
+                  }))
+              ).map((c) => (
+                <li
+                  key={`${c.title}-${c.amountText}-${c.cadence}`}
+                  className="text-sm text-amber-900/85 dark:text-amber-100/85"
+                >
+                  <span className="font-medium text-amber-950 dark:text-amber-50">
+                    {c.title}
+                  </span>
+                  {c.amountSummary ? (
+                    <span className="text-amber-800/90 dark:text-amber-200/90">
+                      {" "}
+                      · {c.amountSummary}
+                    </span>
+                  ) : null}
+                  {c.detail ? (
+                    <span className="mt-0.5 block text-xs opacity-90">{c.detail}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {card.walletPreview.protectionHints.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Protections & insurance
+            </p>
+            <ul className="mt-2 space-y-1.5">
+              {card.walletPreview.protectionHints.map((hint) => (
+                <li
+                  key={hint}
+                  className="text-sm text-sky-900/85 dark:text-sky-100/85"
+                >
+                  {hint}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {(card.walletPreview.perkHints?.length ?? 0) > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Travel & hotel programs
+            </p>
+            <ul className="mt-2 space-y-2">
+              {card.walletPreview.perkHints!.map((perk, index) => (
+                <li
+                  key={walletPerkKey(perk, index)}
+                  className="text-sm text-violet-900/85 dark:text-violet-100/85"
+                >
+                  <span className="font-medium text-violet-950 dark:text-violet-50">
+                    {perk.title}
+                  </span>
+                  {perk.description && perk.description !== perk.title ? (
+                    <span className="text-violet-800/90 dark:text-violet-200/90">
+                      {" "}
+                      — {perk.description}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <p className="text-sm text-muted-foreground">
+      No reward rules yet — open this card to configure.
+    </p>
+  );
+}
+
+function CardDetailPanel({
+  card,
+  reduceMotion,
+}: {
+  card: WalletCard;
+  reduceMotion: boolean | null;
+}) {
+  return (
+    <motion.article
+      key={card.id}
+      initial={reduceMotion ? false : { opacity: 0, x: 20, scale: 0.98 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={reduceMotion ? undefined : { opacity: 0, x: 12, scale: 0.98 }}
+      transition={{ type: "spring", stiffness: 420, damping: 32 }}
+      className="overflow-hidden rounded-[1.35rem] border border-primary/30 bg-white shadow-[0_32px_70px_-18px_rgba(109,40,217,0.35)] ring-2 ring-primary/20 dark:border-primary/25 dark:bg-[rgba(12,12,20,0.96)]"
+    >
+      <div
+        className="border-b border-border/50 px-5 py-5 sm:px-6"
+        style={{
+          background: card.colorHex
+            ? `linear-gradient(135deg, ${card.colorHex}28 0%, transparent 60%)`
+            : undefined,
+        }}
+      >
+        <div className="flex items-start gap-4">
+          <CardThumbnail
+            name={card.name}
+            issuer={card.issuer}
+            last4={card.last4}
+            colorHex={card.colorHex}
+            imageUrl={card.catalogImageUrl}
+            size="lg"
+            className="shadow-2xl ring-1 ring-black/10"
+          />
+          <div className="min-w-0 flex-1 pt-0.5">
+            <h3 className="text-lg font-semibold tracking-tight sm:text-xl">
+              {card.name}
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {card.issuer}
+              {card.last4 ? ` · •••• ${card.last4}` : ""}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {card.catalogLinked ? (
+                <Badge
+                  variant="secondary"
+                  className="bg-primary/12 text-[10px] text-primary"
+                >
+                  Auto rewards
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="text-[10px]">
+                  Manual
+                </Badge>
+              )}
+              {card.hasOfficialPdfExtract && (
+                <Badge className="bg-blue-500/12 text-[10px] text-blue-700 dark:text-blue-300">
+                  Issuer PDF
+                </Badge>
+              )}
+              {!card.isActive && (
+                <Badge variant="outline" className="text-[10px]">
+                  Inactive
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="px-5 py-5 sm:px-6">
+        <CardRewardsBody card={card} />
+        <div className="mt-6 flex flex-wrap gap-2">
+          <Button variant="gradient" size="sm" asChild>
+            <Link href={`/cards/${card.id}`}>Open card</Link>
+          </Button>
+        </div>
+      </div>
+    </motion.article>
+  );
+}
+
+function EmptyDetailPanel() {
+  return (
+    <div className="flex h-full min-h-[280px] flex-col items-center justify-center rounded-[1.35rem] border border-dashed border-violet-500/25 bg-gradient-to-br from-violet-500/[0.04] to-transparent px-6 py-12 text-center">
+      <div className="flex size-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+        <Sparkles className="size-5" />
+      </div>
+      <p className="mt-4 text-sm font-medium">Select a card</p>
+      <p className="mt-1 max-w-xs text-xs text-muted-foreground">
+        Hover a card on the left to preview rewards, credits, and protections here.
+      </p>
+    </div>
+  );
+}
+
 export function WalletStack({ cards }: Props) {
   const reduceMotion = useReducedMotion();
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const activeCard = cards.find((c) => c.id === activeId) ?? null;
+  /** Tighter list rows so ~8+ cards fit without scrolling the page. */
+  const compactList = cards.length >= 6;
+  const thumbSize = compactList ? "xs" : "sm";
 
   if (cards.length === 0) {
     return (
@@ -67,236 +360,150 @@ export function WalletStack({ cards }: Props) {
     );
   }
 
-  const anyHovered = hoveredId !== null;
-
   return (
-    <div className="relative mx-auto max-w-lg pt-2 pb-4 md:max-w-2xl md:pt-4 md:pb-8">
-      <div className="pointer-events-none absolute inset-x-4 -top-1 h-8 rounded-t-[2rem] bg-gradient-to-b from-zinc-900/8 to-transparent dark:from-white/10" />
+    <div
+      className="mx-auto w-full max-w-6xl"
+      onMouseLeave={() => setActiveId(null)}
+    >
+      <div
+        className={cn(
+          "grid gap-5 lg:items-start lg:gap-8",
+          compactList
+            ? "lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]"
+            : "lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]",
+        )}
+      >
+        {/* Left — card headers */}
+        <ul
+          className={cn(compactList ? "space-y-1" : "space-y-2")}
+          role="list"
+        >
+          {cards.map((card, index) => {
+            const isActive = activeId === card.id;
 
-      <ul className="relative isolate space-y-0">
-        {cards.map((card, index) => {
-          const isHovered = hoveredId === card.id;
-          const hoveredIndex =
-            hoveredId != null
-              ? cards.findIndex((c) => c.id === hoveredId)
-              : -1;
-          const stackOffset = index * (reduceMotion ? 0 : 12);
-          const baseZ = cards.length - index;
-          const stacksAboveHovered =
-            anyHovered && hoveredIndex >= 0 && index < hoveredIndex;
-          const zIndex = isHovered ? 1000 : stacksAboveHovered ? 1 : baseZ;
-          const animateY = isHovered ? -12 : stackOffset;
-
-          return (
-            <li
-              key={card.id}
-              style={{
-                zIndex,
-                position: "relative",
-                transform: `translateY(${animateY}px) scale(${isHovered ? 1.02 : 1})`,
-                transition: reduceMotion
-                  ? undefined
-                  : "transform 0.2s ease-out",
-              }}
-              onMouseEnter={() => setHoveredId(card.id)}
-              onMouseLeave={() => setHoveredId(null)}
-              className={cn(
-                index > 0 && !isHovered && "-mt-8 sm:-mt-10",
-                isHovered && "relative z-[1000] -mt-4 sm:-mt-6 md:mb-3",
-                stacksAboveHovered && "pointer-events-none",
-              )}
-            >
-              <Link href={`/cards/${card.id}`} className="group block">
-                <article
+            return (
+              <motion.li
+                key={card.id}
+                initial={reduceMotion ? false : { opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{
+                  delay: reduceMotion ? 0 : index * 0.05,
+                  type: "spring",
+                  stiffness: 400,
+                  damping: 28,
+                }}
+              >
+                <button
+                  type="button"
+                  onMouseEnter={() => setActiveId(card.id)}
+                  onFocus={() => setActiveId(card.id)}
+                  onClick={() => setActiveId(card.id)}
                   className={cn(
-                    "overflow-hidden rounded-[1.35rem] border backdrop-blur-xl transition-[box-shadow,border-color,transform] duration-200",
-                    isHovered
-                      ? "border-primary/35 bg-white shadow-[0_32px_70px_-18px_rgba(109,40,217,0.42)] ring-2 ring-primary/25 dark:border-primary/30 dark:bg-[rgba(12,12,20,0.96)]"
-                      : "border-white/60 bg-white/75 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.35)] dark:border-white/[0.08] dark:bg-[rgba(12,12,20,0.72)] hover:shadow-[0_28px_60px_-20px_rgba(109,40,217,0.28)]",
+                    "group relative flex w-full items-center overflow-hidden border text-left",
+                    compactList
+                      ? "gap-2 rounded-lg px-2 py-1.5"
+                      : "gap-2.5 rounded-xl px-2.5 py-2 sm:gap-3 sm:px-3 sm:py-2.5",
+                    reduceMotion
+                      ? undefined
+                      : "transition-[box-shadow,border-color,background-color] duration-200 ease-out",
+                    isActive
+                      ? "border-primary/40 bg-white shadow-[0_8px_24px_-10px_rgba(109,40,217,0.4)] ring-1 ring-primary/25 dark:bg-[rgba(12,12,20,0.92)]"
+                      : "border-border/70 bg-card/80 shadow-sm hover:border-violet-500/30 hover:bg-white hover:shadow-md dark:bg-[rgba(12,12,20,0.55)]",
                   )}
                 >
-                  <div
-                    className="relative px-4 pb-3 pt-4 sm:px-5 sm:pt-5"
-                    style={{
-                      background: card.colorHex
-                        ? `linear-gradient(135deg, ${card.colorHex}22 0%, transparent 55%)`
-                        : undefined,
-                    }}
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="transition-transform duration-200 group-hover:scale-[1.03] group-hover:-rotate-1">
-                        <CardThumbnail
-                          name={card.name}
-                          issuer={card.issuer}
-                          last4={card.last4}
-                          colorHex={card.colorHex}
-                          imageUrl={card.catalogImageUrl}
-                          size="lg"
-                          className="shadow-2xl ring-1 ring-black/10"
-                        />
-                      </div>
-                      <div className="min-w-0 flex-1 pt-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <h3
-                              className={cn(
-                                "text-base font-semibold tracking-tight sm:text-lg",
-                                isHovered ? "whitespace-normal" : "truncate",
-                              )}
-                            >
-                              {card.name}
-                            </h3>
-                            <p className="mt-0.5 text-sm text-muted-foreground">
-                              {card.issuer}
-                              {card.last4 ? ` · •••• ${card.last4}` : ""}
-                            </p>
-                          </div>
-                          <ChevronRight className="size-5 shrink-0 text-muted-foreground/50 transition group-hover:translate-x-0.5 group-hover:text-primary" />
-                        </div>
-                        <div className="mt-2.5 flex flex-wrap gap-1.5">
-                          {card.catalogLinked ? (
-                            <Badge
-                              variant="secondary"
-                              className="bg-primary/12 text-[10px] text-primary"
-                            >
-                              Auto rewards
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary" className="text-[10px]">
-                              Manual
-                            </Badge>
-                          )}
-                          {card.hasOfficialPdfExtract && (
-                            <Badge className="bg-blue-500/12 text-[10px] text-blue-700 dark:text-blue-300">
-                              Issuer PDF
-                            </Badge>
-                          )}
-                          {!card.isActive && (
-                            <Badge variant="outline" className="text-[10px]">
-                              Inactive
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-border/50 px-4 py-3.5 sm:px-5">
-                    {card.walletScoreAnalyzing ? (
-                      <CardIntelProgress
-                        intelJob={card.intelJob}
-                        pdfSummary={card.walletPreview.pdfSummary}
-                        creditHints={card.walletPreview.statementCreditHints}
-                        ruleHighlights={card.walletPreview.ruleHighlights}
-                      />
-                    ) : intelHasFailed(card.intelJob) &&
-                      card.walletPreview.ruleHighlights.length === 0 ? (
-                      <CardIntelProgress
-                        intelJob={card.intelJob}
-                        pdfSummary={card.walletPreview.pdfSummary}
-                        creditHints={card.walletPreview.statementCreditHints}
-                        ruleHighlights={[]}
-                      />
-                    ) : card.walletPreview.ruleHighlights.length > 0 ? (
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Top earn rates
-                        </p>
-                        <ul className="mt-2 flex flex-wrap gap-1.5">
-                          {card.walletPreview.ruleHighlights.map((line) => (
-                            <li
-                              key={line}
-                              className="rounded-full bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-foreground/90"
-                            >
-                              {line.replaceAll("_", " ")}
-                            </li>
-                          ))}
-                        </ul>
-                        {card.walletPreview.benefitsSummary && (
-                          <p
-                            className={cn(
-                              "mt-2 text-[11px] text-muted-foreground",
-                              !isHovered && "line-clamp-2",
-                            )}
-                          >
-                            {card.walletPreview.benefitsSummary}
-                          </p>
-                        )}
-                        {(card.walletPreview.statementCredits?.length ??
-                          card.walletPreview.statementCreditHints.length) > 0 && (
-                          <ul className="mt-2.5 space-y-2">
-                            {(card.walletPreview.statementCredits?.length
-                              ? card.walletPreview.statementCredits
-                              : card.walletPreview.statementCreditHints.map(
-                                  (hint) => ({
-                                    title: hint,
-                                    amountText: null,
-                                    cadence: null,
-                                    merchantHint: null,
-                                    enrollmentRequired: false,
-                                    detail: null,
-                                  }),
-                                )
-                            )
-                              .slice(0, isHovered ? undefined : 4)
-                              .map((c) => (
-                                <li
-                                  key={`${c.title}-${c.amountText}-${c.cadence}`}
-                                  className={cn(
-                                    "text-[11px] text-amber-900/85 dark:text-amber-100/85",
-                                    !isHovered && "line-clamp-3",
-                                  )}
-                                >
-                                  <span className="font-medium text-amber-950 dark:text-amber-50">
-                                    {c.title}
-                                  </span>
-                                  {c.amountText || c.cadence ? (
-                                    <span className="text-amber-800/90 dark:text-amber-200/90">
-                                      {" "}
-                                      · {[c.amountText, c.cadence]
-                                        .filter(Boolean)
-                                        .join(" · ")}
-                                    </span>
-                                  ) : null}
-                                  {c.detail ? (
-                                    <span className="mt-0.5 block text-[10px] opacity-90">
-                                      {c.detail}
-                                    </span>
-                                  ) : null}
-                                </li>
-                              ))}
-                          </ul>
-                        )}
-                        {card.walletPreview.protectionHints.length > 0 && (
-                          <ul className="mt-2 space-y-1">
-                            {card.walletPreview.protectionHints
-                              .slice(0, isHovered ? undefined : 2)
-                              .map((hint) => (
-                                <li
-                                  key={hint}
-                                  className={cn(
-                                    "text-[11px] text-sky-900/85 dark:text-sky-100/85",
-                                    !isHovered && "line-clamp-2",
-                                  )}
-                                >
-                                  {hint}
-                                </li>
-                              ))}
-                          </ul>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">
-                        No reward rules yet — tap to configure.
-                      </p>
+                  <span
+                    className={cn(
+                      "absolute inset-y-1 left-0 w-0.5 rounded-full bg-primary transition-opacity duration-200",
+                      isActive ? "opacity-100" : "opacity-0 group-hover:opacity-50",
                     )}
+                    aria-hidden
+                  />
+                  <CardThumbnail
+                    name={card.name}
+                    issuer={card.issuer}
+                    last4={card.last4}
+                    colorHex={card.colorHex}
+                    imageUrl={card.catalogImageUrl}
+                    size={thumbSize}
+                    className={cn(
+                      "shrink-0 shadow-sm ring-1 ring-black/10",
+                      !reduceMotion &&
+                        !compactList &&
+                        "transition-transform duration-200 group-hover:-rotate-1 group-hover:scale-[1.03]",
+                      !reduceMotion && !compactList && isActive && "-rotate-1 scale-[1.03]",
+                    )}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <h3
+                        className={cn(
+                          "truncate font-semibold tracking-tight",
+                          compactList ? "text-xs" : "text-sm",
+                        )}
+                      >
+                        {card.name}
+                      </h3>
+                      <ChevronRight
+                        className={cn(
+                          "size-3.5 shrink-0 text-muted-foreground/40 transition",
+                          isActive
+                            ? "translate-x-0.5 text-primary"
+                            : "group-hover:translate-x-0.5 group-hover:text-primary/70",
+                        )}
+                      />
+                    </div>
+                    <p
+                      className={cn(
+                        "truncate text-muted-foreground",
+                        compactList ? "text-[10px] leading-tight" : "text-xs",
+                      )}
+                    >
+                      {card.issuer}
+                      {card.last4 ? ` · ${card.last4}` : ""}
+                    </p>
                   </div>
-                </article>
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
+                </button>
+              </motion.li>
+            );
+          })}
+        </ul>
+
+        {/* Right — detail panel (desktop) */}
+        <div className="hidden min-h-[280px] lg:block lg:sticky lg:top-24">
+          <AnimatePresence mode="wait">
+            {activeCard ? (
+              <CardDetailPanel
+                key={activeCard.id}
+                card={activeCard}
+                reduceMotion={reduceMotion}
+              />
+            ) : (
+              <motion.div
+                key="empty"
+                initial={reduceMotion ? false : { opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <EmptyDetailPanel />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      {/* Mobile — detail below list */}
+      <div className="lg:hidden">
+        <AnimatePresence mode="wait">
+          {activeCard ? (
+            <CardDetailPanel
+              key={`mobile-${activeCard.id}`}
+              card={activeCard}
+              reduceMotion={reduceMotion}
+            />
+          ) : null}
+        </AnimatePresence>
+      </div>
     </div>
   );
 }

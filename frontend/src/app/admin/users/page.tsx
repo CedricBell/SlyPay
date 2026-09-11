@@ -46,7 +46,7 @@ export default function AdminUsersPage() {
     } catch (e) {
       if (e instanceof ApiError) {
         setErr(formatCaughtApiError(e));
-      } else setErr("Erreur de chargement");
+      } else setErr("Failed to load");
     }
   }, [page]);
 
@@ -65,7 +65,7 @@ export default function AdminUsersPage() {
       await load();
     } catch (e) {
       if (e instanceof ApiError) setErr(formatCaughtApiError(e));
-      else setErr("Échec de la mise à jour");
+      else setErr("Update failed");
     } finally {
       setBusy(null);
     }
@@ -77,7 +77,7 @@ export default function AdminUsersPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Utilisateurs" />
+      <PageHeader title="Users" />
       {err ? (
         <StatusMessage variant="error">
           <pre className="overflow-x-auto text-xs">{err}</pre>
@@ -89,10 +89,10 @@ export default function AdminUsersPage() {
           <thead className="border-b border-border bg-muted/50">
             <tr>
               <th className="px-3 py-2 font-medium">Email</th>
-              <th className="px-3 py-2 font-medium">Rôle</th>
-              <th className="px-3 py-2 font-medium">Actif</th>
-              <th className="px-3 py-2 font-medium">Cartes</th>
-              <th className="px-3 py-2 font-medium">Créé</th>
+              <th className="px-3 py-2 font-medium">Role</th>
+              <th className="px-3 py-2 font-medium">Active</th>
+              <th className="px-3 py-2 font-medium">Cards</th>
+              <th className="px-3 py-2 font-medium">Created</th>
               <th className="px-3 py-2 font-medium">Actions</th>
             </tr>
           </thead>
@@ -107,9 +107,9 @@ export default function AdminUsersPage() {
                 </td>
                 <td className="px-3 py-2">
                   {u.isActive ? (
-                    <span className="text-primary">oui</span>
+                    <span className="text-primary">yes</span>
                   ) : (
-                    <span className="text-destructive">non</span>
+                    <span className="text-destructive">no</span>
                   )}
                 </td>
                 <td className="px-3 py-2">{u.cardCount}</td>
@@ -126,7 +126,7 @@ export default function AdminUsersPage() {
                         disabled={busy === u.id}
                         onClick={() => patch(u.id, { isActive: false })}
                       >
-                        Désactiver
+                        Deactivate
                       </Button>
                     ) : (
                       <Button
@@ -135,7 +135,7 @@ export default function AdminUsersPage() {
                         disabled={busy === u.id}
                         onClick={() => patch(u.id, { isActive: true })}
                       >
-                        Réactiver
+                        Reactivate
                       </Button>
                     )}
                     {u.role !== "ADMIN" && (
@@ -158,7 +158,7 @@ export default function AdminUsersPage() {
                         disabled={busy === u.id}
                         onClick={() => patch(u.id, { role: "USER" })}
                       >
-                        Retirer admin
+                        Remove admin
                       </Button>
                     )}
                   </div>
@@ -178,7 +178,7 @@ export default function AdminUsersPage() {
             disabled={page <= 1}
             onClick={() => setPage((p) => Math.max(1, p - 1))}
           >
-            Précédent
+            Previous
           </Button>
           <span>
             Page {data.page} / {data.pages}
@@ -190,7 +190,7 @@ export default function AdminUsersPage() {
             disabled={page >= data.pages}
             onClick={() => setPage((p) => p + 1)}
           >
-            Suivant
+            Next
           </Button>
         </div>
       )}

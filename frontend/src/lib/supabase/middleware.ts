@@ -41,9 +41,17 @@ export async function updateSession(request: NextRequest) {
     },
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user: Awaited<
+    ReturnType<typeof supabase.auth.getUser>
+  >["data"]["user"] = null;
+
+  try {
+    const { data, error } = await supabase.auth.getUser();
+    if (!error) user = data.user;
+  } catch {
+    // Supabase unreachable (DNS/network) — skip auth checks for this request.
+    return supabaseResponse;
+  }
 
   const path = request.nextUrl.pathname;
   const isAuthApi =

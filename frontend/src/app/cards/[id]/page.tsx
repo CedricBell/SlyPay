@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { SurfaceCard } from "@/components/ui/surface-card";
 import { apiFetch, ApiError, formatCaughtApiError } from "@/lib/api";
 import { intelHasFailed } from "@/lib/card-intel-status";
-import type { MappedIntelJob } from "@/lib/map-credit-card";
+import { walletPerkKey, type MappedIntelJob, type WalletPerkPreview } from "@/lib/map-credit-card";
 import type { StatementCreditDisplay } from "@/lib/statement-credit-display";
 
 type WalletPreview = {
@@ -22,6 +22,7 @@ type WalletPreview = {
   statementCreditHints: string[];
   statementCredits?: StatementCreditDisplay[];
   protectionHints: string[];
+  perkHints?: WalletPerkPreview[];
 };
 
 type CardDetail = {
@@ -275,7 +276,8 @@ export default function EditCardPage() {
 
         {intel?.walletPreview &&
         (intel.walletPreview.statementCreditHints.length > 0 ||
-          intel.walletPreview.protectionHints.length > 0) ? (
+          intel.walletPreview.protectionHints.length > 0 ||
+          (intel.walletPreview.perkHints?.length ?? 0) > 0) ? (
           <SurfaceCard className="border-emerald-500/25 bg-emerald-500/5 p-4 text-sm">
             <p className="font-semibold text-emerald-900 dark:text-emerald-100">
               From official documentation
@@ -293,6 +295,7 @@ export default function EditCardPage() {
                         title: hint,
                         amountText: null,
                         cadence: null,
+                        amountSummary: null,
                         merchantHint: null,
                         enrollmentRequired: false,
                         detail: null,
@@ -300,11 +303,11 @@ export default function EditCardPage() {
                   ).map((c) => (
                     <li key={`${c.title}-${c.amountText}-${c.cadence}`}>
                       <p className="font-medium text-foreground">{c.title}</p>
-                      {(c.amountText || c.cadence) && (
-                        <p className="mt-0.5 text-muted-foreground">
-                          {[c.amountText, c.cadence].filter(Boolean).join(" · ")}
+                      {c.amountSummary ? (
+                        <p className="mt-0.5 font-medium text-foreground/90">
+                          {c.amountSummary}
                         </p>
-                      )}
+                      ) : null}
                       {c.merchantHint &&
                       !c.title.toLowerCase().includes(c.merchantHint.toLowerCase()) ? (
                         <p className="mt-0.5 text-xs text-muted-foreground">
@@ -327,11 +330,30 @@ export default function EditCardPage() {
             {intel.walletPreview.protectionHints.length > 0 && (
               <div className="mt-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Protections
+                  Protections & insurance
                 </p>
                 <ul className="mt-1.5 space-y-1">
                   {intel.walletPreview.protectionHints.map((hint) => (
                     <li key={hint}>{hint}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {(intel.walletPreview.perkHints?.length ?? 0) > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Travel, hotel & programs
+                </p>
+                <ul className="mt-2 space-y-3">
+                  {intel.walletPreview.perkHints!.map((perk, index) => (
+                    <li key={walletPerkKey(perk, index)}>
+                      <p className="font-medium text-foreground">{perk.title}</p>
+                      {perk.description && perk.description !== perk.title ? (
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {perk.description}
+                        </p>
+                      ) : null}
+                    </li>
                   ))}
                 </ul>
               </div>

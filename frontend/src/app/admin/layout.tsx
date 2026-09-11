@@ -12,10 +12,10 @@ import { SurfaceCard } from "@/components/ui/surface-card";
 import { cn } from "@/lib/utils";
 
 const adminLinks = [
-  { href: "/admin/users", label: "Utilisateurs" },
-  { href: "/admin/credit-cards", label: "Catalogue cartes" },
-  { href: "/admin/card-catalog", label: "Intel catalogue" },
-  { href: "/admin/contributions", label: "Signalements" },
+  { href: "/admin/users", label: "Users" },
+  { href: "/admin/credit-cards", label: "Card catalog" },
+  { href: "/admin/card-catalog", label: "Catalog intel" },
+  { href: "/admin/contributions", label: "Feedback" },
 ];
 
 export default function AdminLayout({
@@ -55,7 +55,7 @@ export default function AdminLayout({
   if (!ready) {
     return (
       <FadeIn className="py-16 text-center text-sm text-muted-foreground">
-        Vérification des droits admin…
+        Checking admin access…
       </FadeIn>
     );
   }
@@ -74,7 +74,7 @@ export default function AdminLayout({
           />
           <div className="min-w-0 space-y-2">
             <h1 className="text-xl font-semibold tracking-tight">
-              Administration
+              Admin
             </h1>
             <nav className="flex flex-wrap gap-2">
               {adminLinks.map((l) => (
@@ -95,7 +95,7 @@ export default function AdminLayout({
           </div>
         </div>
         <Button variant="outline" asChild>
-          <Link href="/dashboard">← Retour app</Link>
+          <Link href="/dashboard">← Back to app</Link>
         </Button>
       </SurfaceCard>
       {children}

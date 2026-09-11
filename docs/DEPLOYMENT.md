@@ -1,101 +1,91 @@
-# Déploiement SpendLess (lien public + admin)
+# Deployment
 
-Architecture recommandée pour un MVP partageable :
+Recommended setups for a shareable MVP.
 
-| Composant | Service suggéré | Rôle |
-|-----------|-----------------|------|
-| **PostgreSQL** | [Railway](https://railway.app), [Neon](https://neon.tech), [Supabase](https://supabase.com), ou RDS | Base de données |
-| **API NestJS** | Railway, [Render](https://render.com), [Fly.io](https://fly.io) | `Dockerfile` dans `backend/` |
-| **Frontend Next.js** | [Vercel](https://vercel.com) | Dossier `frontend/` |
+## Path A — Next.js full-stack (B-lite) — recommended
 
-Tu obtiens : **URL Vercel** pour le site (à envoyer aux testeurs) et **URL API** pour `NEXT_PUBLIC_API_URL`.
+| Component | Suggested service | Role |
+|-----------|-------------------|------|
+| **App** | [Vercel](https://vercel.com) | `frontend/` (UI + `/api/v1` Route Handlers) |
+| **Auth + DB** | [Supabase](https://supabase.com) | Auth + PostgreSQL (Prisma) |
 
----
+You get one public site URL to share. Configure env vars from [`frontend/.env.example`](../frontend/.env.example) in the Vercel project (never commit real values).
 
-## 1. Base PostgreSQL
+### Steps
 
-1. Crée une base managée (Railway “Postgres”, Neon, etc.).
-2. Copie l’URL **PostgreSQL** (format `postgresql://user:pass@host:5432/db?sslmode=require`).
+1. Create a Supabase project; copy **Project URL**, **anon key**, and a **pooler `DATABASE_URL`** (Transaction mode on serverless).
+2. Import the GitHub repo on Vercel; set **Root Directory** to `frontend`.
+3. Set env vars (`NEXT_PUBLIC_SUPABASE_*`, `DATABASE_URL`, `OPENAI_API_KEY`, optional Maps/Places keys).
+4. Run migrations against the same database: from `frontend/`, `npx prisma migrate deploy` (CI or one-off with the production `DATABASE_URL`).
+5. Configure Supabase Auth redirect URLs for your Vercel domain (`/auth/callback`, `/reset-password`).
+6. Restrict Google API keys by HTTP referrer / IP if used.
 
----
+### Admin bootstrap
 
-## 2. API (ex. Railway)
+1. Sign up on the deployed site with the email you want as admin.
+2. Set `SEED_ADMIN_EMAIL` to that email (lowercase) in Vercel env, redeploy so the next authenticated request can promote the Prisma user.
+3. Sign out and sign in again so the session reflects `ADMIN`.
+4. Use **Admin** in the nav → `/admin/users` (and catalog / proposals pages).
 
-1. Nouveau projet → **Deploy from GitHub** (ou upload du repo).
-2. **Root directory** : `backend` (important pour un monorepo).
-3. **PostgreSQL sur Railway** : dans le même projet, **+ New** → **Database** → **Add PostgreSQL**. Sur le service Postgres → **Variables** : récupère `DATABASE_URL`. Sur ton service **API** → **Variables** → **Add variable** → **Reference** → sélectionne Postgres → variable `DATABASE_URL` (comme ça l’URL suit la base).
-4. Le fichier **`backend/railway.toml`** indique à Railway d’utiliser le **Dockerfile** (sinon Nixpacks peut démarrer `node dist/main.js` sans avoir lancé `nest build` → erreur *Cannot find module '/app/dist/main.js'*). Après `git push`, clique **Redeploy**.
-5. **Dockerfile** : celui du repo (`backend/Dockerfile` déjà prévu).
-6. Variables d’environnement :
-
-| Variable | Exemple / note |
-|----------|----------------|
-| `DATABASE_URL` | URL fournie par le provider Postgres |
-| `JWT_ACCESS_SECRET` | `openssl rand -base64 48` (long, secret) |
-| `JWT_ACCESS_EXPIRES` | `15m` |
-| `JWT_REFRESH_DAYS` | `14` |
-| `PORT` | `4000` (ou laisser Railway injecter `PORT` et adapter le Dockerfile si besoin) |
-| `CORS_ORIGIN` | URL(s) du front, **sans slash final** : `https://ton-app.vercel.app` (plusieurs séparées par des virgules) |
-| `SEED_ADMIN_EMAIL` | (optionnel) ton email **après** inscription — voir section Admin |
-
-7. **Commande de démarrage** : avec `railway.toml`, c’est déjà `migrate + seed + node dist/main.js`. Sinon, dans l’UI Railway (**Settings** → **Deploy** → **Custom Start Command**) :
-
-```bash
-npx prisma migrate deploy && npx prisma db seed && node dist/main.js
-```
-
-Sans `railway.toml`, mets cette ligne dans **Custom Start Command**.
-
-8. Note l’URL publique HTTPS de l’API, ex. `https://spendless-api-production.up.railway.app`.
-
-**Healthcheck** : `GET https://…/api/v1/health`
+Remove or leave unset `SEED_ADMIN_EMAIL` after promotion on any long-lived public environment.
 
 ---
 
-## 3. Frontend (Vercel)
+## Path B — Nest API + Next + managed Postgres
 
-1. Import du repo GitHub, **Root Directory** : `frontend`.
-2. Variables :
+| Component | Suggested service | Role |
+|-----------|-------------------|------|
+| **PostgreSQL** | Railway, Neon, Supabase, or RDS | Database |
+| **Nest API** | Railway, Render, or Fly.io | `backend/` Dockerfile |
+| **Next.js** | Vercel | `frontend/` with `NEXT_PUBLIC_API_URL` |
 
-| Variable | Valeur |
+### 1. PostgreSQL
+
+Create a managed database and copy the URI (`postgresql://…?sslmode=require` when required).
+
+### 2. API (e.g. Railway)
+
+1. Deploy from GitHub; **root directory** `backend`.
+2. Wire `DATABASE_URL` from the Postgres service.
+3. Prefer `backend/railway.toml` + Dockerfile so the image builds Nest correctly.
+4. Environment:
+
+| Variable | Notes |
 |----------|--------|
-| `NEXT_PUBLIC_API_URL` | `https://TON-API.up.railway.app/api/v1` (inclure `/api/v1`) |
+| `DATABASE_URL` | From the DB provider |
+| `JWT_ACCESS_SECRET` | `openssl rand -base64 48` |
+| `JWT_ACCESS_EXPIRES` | e.g. `15m` |
+| `JWT_REFRESH_DAYS` | e.g. `14` |
+| `PORT` | Often injected by the platform |
+| `CORS_ORIGIN` | Frontend origin(s), no trailing slash |
+| `SEED_ADMIN_EMAIL` | Optional; see Admin above |
 
-3. Déploie. L’URL Vercel (`https://….vercel.app`) est celle à **partager**.
+Start command pattern: `npx prisma migrate deploy && npx prisma db seed && node dist/main.js`
 
-4. Retourne sur l’API et mets à jour **`CORS_ORIGIN`** avec l’URL Vercel exacte, puis redéploie l’API si nécessaire.
+Health: `GET /api/v1/health`
 
----
+### 3. Frontend (Vercel)
 
-## 4. Devenir administrateur
-
-1. Ouvre le site en production, **inscris-toi** avec l’email que tu veux utiliser comme admin.
-2. Dans les variables de l’API, définis **`SEED_ADMIN_EMAIL`** = cet email (minuscules).
-3. Relance **une fois** le seed (redeploy avec commande incluant `npx prisma db seed`, ou exécute le seed manuellement depuis une console avec les mêmes env).
-
-Le seed promeut ce compte en **`ADMIN`**.
-
-4. **Déconnecte-toi et reconnecte-toi** pour recevoir un JWT contenant `role: ADMIN`.
-
-Ensuite : lien **Admin** dans la barre de navigation → `/admin/users` : liste des comptes, désactivation, promotion / retrait admin.
-
----
-
-## 5. Sécurité (production)
-
-- Ne commite jamais `.env` ; secrets uniquement dans le dashboard du PaaS.
-- `JWT_ACCESS_SECRET` unique et long.
-- Retire ou change le compte **demo** en prod (`demo@spendless.dev`) si le seed le recrée.
-- HTTPS partout (Vercel / Railway le fournissent par défaut).
-
----
-
-## 6. Dépannage
-
-| Problème | Piste |
+| Variable | Value |
 |----------|--------|
-| CORS dans le navigateur | `CORS_ORIGIN` doit correspondre **exactement** à l’origine du front (schéma + host, pas de slash final). |
-| API 401 après promo admin | Nouveau login pour rafraîchir le JWT. |
-| Migrations | `npx prisma migrate deploy` doit réussir avant `node dist/main.js`. |
+| `NEXT_PUBLIC_API_URL` | `https://YOUR-API.example.com/api/v1` |
 
-Pour le détail des routes : [`docs/API.md`](./API.md).
+Update API `CORS_ORIGIN` to the exact Vercel origin, then redeploy the API if needed.
+
+### 4. Production security
+
+- Never commit `.env` files; use the PaaS secret store.
+- Use a strong unique `JWT_ACCESS_SECRET` (Nest path).
+- Disable or change the Docker **demo** user (`demo@spendless.dev`) on public deploys.
+- HTTPS everywhere (default on Vercel / Railway).
+- See [`SECURITY.md`](../SECURITY.md).
+
+### Troubleshooting
+
+| Issue | Hint |
+|-------|------|
+| Browser CORS errors | `CORS_ORIGIN` must match the frontend origin exactly |
+| 401 after admin promote | Sign in again to refresh the session / JWT |
+| Migrations | `prisma migrate deploy` must succeed before serving traffic |
+
+API details: [`API.md`](./API.md).

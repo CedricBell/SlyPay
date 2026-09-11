@@ -111,7 +111,7 @@ export function intelIsTerminal(job: MappedIntelJob | null | undefined): boolean
 }
 
 export function intelIsActive(job: MappedIntelJob | null | undefined): boolean {
-  if (!job) return true;
+  if (!job) return false;
   return job.status === "PENDING" || job.status === "RUNNING";
 }
 

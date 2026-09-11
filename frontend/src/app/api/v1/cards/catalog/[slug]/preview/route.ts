@@ -5,7 +5,10 @@ import { resolveCatalogImageUrl } from "@/server/catalog-card-art";
 import { CARD_CATALOG_ENTRIES } from "@/server/card-catalog.entries";
 import { parseRewardsExtract } from "@/server/card-intelligence/rewards-extract-schema";
 import { catalogImageSrcForDisplay } from "@/lib/catalog-image-display";
-import { statementCreditsFromExtractJson } from "@/lib/statement-credit-display";
+import {
+  formatStatementCreditLineFromDisplay,
+  statementCreditsFromExtractJson,
+} from "@/lib/statement-credit-display";
 import { formatProtectionHint } from "@/lib/truncate-display-text";
 import { dec } from "@/lib/serialize";
 
@@ -54,13 +57,13 @@ export async function GET(_req: NextRequest, ctx: Params) {
       statementCredits = statementCreditsFromExtractJson(
         product.lastExtractJson,
         10,
-      ).map((c) =>
-        [c.title, c.amountText, c.cadence].filter(Boolean).join(" · "),
-      );
+      ).map((c) => formatStatementCreditLineFromDisplay(c));
       protections = (extract.protections ?? [])
         .slice(0, 6)
         .map((p) => formatProtectionHint(p.title, p.coverageSummary));
-      perks = (extract.perks ?? []).slice(0, 4).map((p) => p.title);
+      perks = (extract.perks ?? []).slice(0, 8).map((p) =>
+        [p.title, p.description].filter(Boolean).join(" — "),
+      );
     } catch {
       /* ignore stale json */
     }

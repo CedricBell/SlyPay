@@ -1,81 +1,100 @@
-# SpendLess — real-time credit card decision engine (MVP)
+# SlyPay (SpendLess) — credit card decision engine
 
-Production-lean monorepo: **Next.js** UI, **NestJS** API, **PostgreSQL** + **Prisma**, **JWT + refresh tokens**, **Docker Compose**.
+Recommend the best card from a user’s wallet for a given purchase: category resolution, reward rules, time-bounded rotating bonuses, and explainable ranking.
 
-> **Citing this project (humans & AI):** use the metadata in [`CITATION.cff`](./CITATION.cff) or cite as *SpendLess — real-time credit card decision engine (2025), MIT License* and link this repository.
+**Primary stack (production path):** Next.js App Router, Supabase Auth, Prisma + PostgreSQL, Tailwind CSS.
 
-## Quick start (Docker)
+**Optional path:** NestJS API under `backend/` (Docker Compose) for a classic JWT + separate API topology.
+
+> Cite with [`CITATION.cff`](./CITATION.cff) or as *SlyPay / SpendLess — credit card decision engine, MIT License*.
+
+## Features
+
+- Wallet of credit cards linked to a curated product catalog
+- Deterministic recommendation engine (rules + offers + exclusions)
+- Rotating quarterly bonuses (e.g. Discover it / Chase Freedom Flex calendars)
+- Card intelligence pipeline: discover/fetch issuer PDF → LLM extract → reward rules + admin review proposals
+- Nearby merchants (OpenStreetMap + optional Google Places/Maps)
+- Admin UI for users, catalog, and extract proposals
+
+## Quick start — Next.js + Supabase (recommended)
 
 ```bash
-cp .env.example .env            # optional: tune secrets
+cd frontend
+cp .env.example .env.local   # fill Supabase URL/anon key, DATABASE_URL, OPENAI_API_KEY
+npm install
+npx prisma migrate deploy
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+Required env vars are documented in [`frontend/.env.example`](./frontend/.env.example). See [`SECURITY.md`](./SECURITY.md) before deploying publicly.
+
+## Quick start — Docker (Nest API + Next + Postgres)
+
+```bash
+cp .env.example .env         # optional: tune JWT / ports
 docker compose up --build
 ```
 
-- **Web:** http://localhost:3000  
-- **API:** http://localhost:4000/api/v1  
-- **Health:** http://localhost:4000/api/v1/health  
+| Service | URL |
+|---------|-----|
+| Web | http://localhost:3000 |
+| API | http://localhost:4000/api/v1 |
+| Health | http://localhost:4000/api/v1/health |
 
-**Demo login**
+**Local demo user** (seeded; do **not** use on a public deployment):
 
-- Email: `demo@spendless.dev`  
-- Password: `Demo12345!`  
-
-(Seeded wallet includes two contrasting cards + sample merchants/MCC rows.)
+- Email: `demo@spendless.dev`
+- Password: `Demo12345!`
 
 ### Troubleshooting: `ERR_CONNECTION_REFUSED` on port 4000
 
-The browser calls `http://localhost:4000/...` using the URL baked into the frontend at **build time** (`NEXT_PUBLIC_API_URL`). Connection refused almost always means **nothing is listening on the host’s port 4000** — usually the **API container exited** during migrate/seed/start, or it was not bound for Docker networking.
+The browser calls the API URL baked at **build time** (`NEXT_PUBLIC_API_URL`). Connection refused usually means the API container is down or not bound.
 
-1. **Check containers:** `docker compose ps` — `api` should be `Up` and `healthy`.
-2. **Read API logs:** `docker compose logs api --tail=100` — look for Prisma migrate/seed errors or Nest crash.
-3. **Probe from your machine:** `curl -s http://localhost:4000/api/v1/health` — should return JSON with `"status":"ok"`.
-4. **Accès depuis un autre appareil** (téléphone, autre PC) : l’URL du site peut être `http://192.168.x.x:3000`, mais le JS utilise encore `localhost:4000`, qui pointe vers **l’appareil lui-même**, pas votre machine. Il faut reconstruire le front avec `NEXT_PUBLIC_API_URL` = URL joignable depuis ce client (ex. `http://192.168.x.x:4000/api/v1`).
+1. `docker compose ps` — `api` should be `Up` and healthy.
+2. `docker compose logs api --tail=100`
+3. `curl -s http://localhost:4000/api/v1/health`
 
-The API listens on **`0.0.0.0`** inside the container so published port `4000:4000` works from the host.
+Accessing the UI from another device (phone / LAN): rebuild the frontend with `NEXT_PUBLIC_API_URL` set to a host-reachable URL (e.g. `http://192.168.x.x:4000/api/v1`). `localhost` in the client always points at the device itself.
 
 ### Troubleshooting: Prisma **P3009** (failed migration)
 
-P3009 means Prisma found a **failed** migration in `_prisma_migrations` (often because an old `migration.sql` contained invalid lines). The init migration in this repo has been corrected; **reset the DB volume** and redeploy:
+Reset the Docker volume and redeploy:
 
 ```bash
 docker compose down -v
 docker compose up --build
 ```
 
-`-v` removes the Postgres volume so migrations apply cleanly. **Logs API:** `docker compose logs api --tail=100` (not `docker compose api`).
+## Local development without Docker
 
-## Local development (without Docker)
+### PostgreSQL
 
-### Database (PostgreSQL)
+Default Compose / Nest URL: `postgresql://spendless:spendless@localhost:5432/spendless`.
 
-PostgreSQL 16 must be running locally. The default `backend/.env` uses `postgresql://spendless:spendless@localhost:5432/spendless`.
-
-**Si tu as l’erreur P1010 « User spendless was denied access »** : l’utilisateur ou la base n’existe pas encore. Deux options :
-
-**Option A — Créer l’utilisateur et la base** (une fois, en tant qu’admin Postgres) :
+If you see Prisma **P1010** (user denied), create the role and database once:
 
 ```bash
 psql -U postgres -h localhost -c "CREATE USER spendless WITH PASSWORD 'spendless' CREATEDB;"
 psql -U postgres -h localhost -c "CREATE DATABASE spendless OWNER spendless;"
 ```
 
-Sous macOS avec Postgres installé via Homebrew, le superuser est souvent ton compte système (sans mot de passe) : remplace `-U postgres` par `-U $(whoami)` si besoin.
+On macOS Homebrew Postgres, the superuser is often your OS user: use `-U "$(whoami)"` if needed. Or point `DATABASE_URL` at an existing role/database.
 
-**Option B — Utiliser ton utilisateur Postgres existant** : édite `backend/.env` et mets une URL du type  
-`postgresql://TON_USER:TON_MOT_DE_PASSE@localhost:5432/TA_BASE` (crée la base si besoin avec `createdb TA_BASE`).
-
-### Backend
+### Nest backend
 
 ```bash
 cd backend
-cp .env.example .env            # edit DATABASE_URL + JWT_ACCESS_SECRET
-yarn install --ignore-engines   # if your Node is <20.19, Yarn ignores engine warnings
-yarn prisma migrate deploy      # or: yarn prisma:migrate:dev (applies UserRole / admin migration)
-yarn prisma db seed             # optional: SEED_ADMIN_EMAIL=you@mail.com to promote admin
+cp .env.example .env
+yarn install --ignore-engines
+yarn prisma migrate deploy
+yarn prisma db seed          # optional: SEED_ADMIN_EMAIL=you@example.com
 yarn start:dev
 ```
 
-### Frontend
+### Frontend (against Nest or B-lite)
 
 ```bash
 cd frontend
@@ -84,46 +103,25 @@ npm install
 npm run dev
 ```
 
-## API surface
+## Docs
 
-See [`docs/API.md`](./docs/API.md). Core call:
-
-```bash
-TOKEN=<access_token>
-curl -s http://localhost:4000/api/v1/recommendation \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"amount":100,"merchantName":"Whole Foods Market"}' | jq
-```
-
-## Architecture & roadmap
-
-- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — diagrams, data flow, REST rationale.  
-- [`docs/FUTURE.md`](./docs/FUTURE.md) — Plaid, ML, extension, mobile.  
-- **Validation:** Nest `class-validator` DTOs (Zod can be layered later for shared schemas).  
-- **Tests:** `cd backend && yarn test` (decision engine unit tests) · `yarn test:e2e` (health smoke w/ Prisma mocked).
+| Doc | Contents |
+|-----|----------|
+| [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) | High-level design |
+| [`docs/API.md`](./docs/API.md) | REST surface (`/api/v1`) |
+| [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) | Deploy + admin bootstrap |
+| [`docs/card-catalog-intel-pipeline.md`](./docs/card-catalog-intel-pipeline.md) | PDF → LLM → rules pipeline |
+| [`docs/FUTURE.md`](./docs/FUTURE.md) | Roadmap ideas |
+| [`SECURITY.md`](./SECURITY.md) | Secrets & production hygiene |
 
 ## Repository layout
 
 ```
-backend/        NestJS + Prisma + decision engine (pure TS)
-frontend/       Next.js App Router + Tailwind CSS v4
-docs/           Architecture, API reference, future work
+frontend/           Next.js app (UI + B-lite API routes + Prisma)
+backend/            Optional NestJS API + Prisma (Docker path)
+docs/               Architecture, API, deployment, intel pipeline
 docker-compose.yml
 ```
-
-## Production deployment sketch
-
-| Layer | Option |
-|-------|--------|
-| Web | Vercel or container behind ALB |
-| API | ECS Fargate / Railway / Fly.io |
-| DB | RDS PostgreSQL (Multi-AZ) |
-| Secrets | AWS Secrets Manager / SSM |
-
-Set strong `JWT_ACCESS_SECRET`, restrict `CORS_ORIGIN`, and run `prisma migrate deploy` in CI/CD before boot.
-
-**Guide pas à pas (lien public + admin)** : [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — Vercel + Railway, variable `SEED_ADMIN_EMAIL`, interface `/admin/users`.
 
 ## License
 

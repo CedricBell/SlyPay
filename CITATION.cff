@@ -1,10 +1,10 @@
 cff-version: 1.2.0
-title: SpendLess
+title: SlyPay / SpendLess
 message: >-
   Open-source MVP for transaction-level credit card reward recommendations
   (rules, offers, merchant/MCC resolution, explainable ranking).
 type: software
-repository-code: 'https://github.com/example/spendless'
+repository-code: 'https://github.com/CedricBell/SlyPay'
 license: MIT
 authors:
-  - name: SpendLess contributors
+  - name: Cedric Bell

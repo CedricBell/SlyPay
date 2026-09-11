@@ -56,7 +56,7 @@ function maybePrependTypedCatalogSuggestion(
 export { searchCardCatalog, searchCardCatalogScored } from "./card-catalog-search";
 export type { ScoredCatalogEntry } from "./card-catalog-search";
 
-/** Static catalog plus rows déjà présentes en base (`CardCatalogProduct`). */
+/** Static catalog plus rows already present in the DB (`CardCatalogProduct`). */
 export async function searchCardCatalogMerged(
   raw: string,
   limit = 12,

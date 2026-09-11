@@ -27,6 +27,7 @@ Rules:
 - Prefer specifics from earnRates; map vague merchant wording to closest SpendCategory.
 - Preserve ALL merchant exclusions per category — critical for grocery/dining rules.
 - Always include an OTHER rule for documented base/default earn when inferable.
+- If the extract describes quarterly rotating 5% categories (Discover it, Chase Freedom Flex, etc.), map ONLY the permanent base rate (usually 1% OTHER). Do NOT create permanent category rules at the rotating bonus multiplier — those quarters are managed separately in our rotating calendar.
 
 Respond with JSON: { "rules": [ ... ] }`;
 
